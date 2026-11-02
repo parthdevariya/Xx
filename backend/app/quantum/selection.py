@@ -126,7 +126,8 @@ def evaluate(db: Session, *, template: str | None, data: dict | None, missing: l
     else:
         factors["potential_quantum_benefit"] = ("no evidence on record of quantum benefit for this problem class "
                                                 "and size; classical methods are expected to match or beat it")
-    route = {"backend": cap.id, "backend_name": cap.name, "algorithm": p.algorithm, "execution_class": exec_class}
+    route = {"backend": cap.id, "backend_name": cap.name, "algorithm": p.algorithm, "execution_class": exec_class,
+             "est_cost_usd": round(need.est_cost_usd, 6), "qubits": need.logical_qubits}
 
     if eligibility != "simulation_only" and evidence and exec_class == "hardware":
         return _decision("quantum_recommended",

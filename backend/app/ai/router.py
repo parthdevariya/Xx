@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from ..models import AIModel, AIProvider, AIRoutingPolicy
 
 LATENCY_SCORE = {"fast": 1.0, "medium": 0.6, "slow": 0.25}
-DEFAULT_WEIGHTS = {"quality": 0.6, "cost": 0.2, "latency": 0.2}
+DEFAULT_WEIGHTS = {"quality": 0.85, "cost": 0.1, "latency": 0.05}
+COST_REFERENCE_USD = 0.05  # a call costing this much scores 0.5 on cost; free scores 1.0
 
 
 @dataclass
@@ -96,11 +97,11 @@ def rank(models: list[AIModel], req: RouteRequest, policy: AIRoutingPolicy | Non
 
     if not viable:
         return RouteResult([], rejected)
-    max_c = max(c for _, c in viable) or 1.0
+    ref = float(rules.get("cost_reference_usd", COST_REFERENCE_USD)) or COST_REFERENCE_USD
     cands = []
     for m, cost in viable:
         q = m.quality_rank / 100
-        c = 1 - (cost / max_c) if max_c else 1.0
+        c = 1 / (1 + cost / ref)
         lat = LATENCY_SCORE.get(m.latency_class, 0.5)
         score = weights["quality"] * q + weights["cost"] * c + weights["latency"] * lat
         cands.append(RouteCandidate(m, m.provider, round(score, 4), cost,

@@ -92,9 +92,10 @@ def seed_ai(db: Session) -> None:
             p.is_active = True
             p.health_status = "unknown"
     if db.scalar(select(AIRoutingPolicy).where(AIRoutingPolicy.is_default.is_(True))) is None:
-        db.add(AIRoutingPolicy(name="Balanced (default)", is_default=True,
+        db.add(AIRoutingPolicy(name="Quality first (default)", is_default=True,
                                description="Quality first, then cost and latency. Falls back down the ranking.",
-                               rules={"weights": {"quality": 0.6, "cost": 0.2, "latency": 0.2},
+                               rules={"weights": {"quality": 0.85, "cost": 0.1, "latency": 0.05},
+                                      "cost_reference_usd": 0.05,
                                       "max_cost_per_call_usd": 1.0,
                                       "category_overrides": {"mathematical": {"min_quality": 80}}}))
     db.flush()

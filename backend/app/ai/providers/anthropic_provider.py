@@ -16,6 +16,9 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 # Models with configurable effort (output_config.effort).
 EFFORT_CAPABLE_PREFIXES = ("claude-fable-5", "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7",
                            "claude-opus-4-6", "claude-sonnet-5", "claude-sonnet-4-6", "claude-haiku-5")
+# Test hook: a callable returning an HTTP client for the SDK (the automated tests inject a mock transport
+# so no request ever leaves the machine). Always None in production.
+http_client_factory = None
 
 
 class AnthropicAdapter:
@@ -28,6 +31,8 @@ class AnthropicAdapter:
         kwargs = {"api_key": cfg.api_key, "timeout": cfg.timeout_s, "max_retries": 1}
         if cfg.base_url:
             kwargs["base_url"] = cfg.base_url
+        if http_client_factory is not None:
+            kwargs["http_client"] = http_client_factory()
         self.client = anthropic.Anthropic(**kwargs)
 
     def list_models(self) -> list[str]:
