@@ -1,0 +1,74 @@
+# Render Blueprint for X. Apply with: Render Dashboard → New → Blueprint → select this repository.
+# Secrets marked sync: false must be entered in the dashboard on first deploy (see PRODUCTION_DEPLOYMENT.md).
+databases:
+  - name: x-db
+    plan: basic-256mb
+    databaseName: x
+    user: x
+
+services:
+  - type: keyvalue
+    name: x-redis
+    plan: starter
+    ipAllowList: []          # private network only
+    maxmemoryPolicy: allkeys-lru
+
+  - type: web
+    name: x-api
+    runtime: python
+    rootDir: backend
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
+    healthCheckPath: /health
+    envVars: &backend_env
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: X_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase: { name: x-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: x-redis, property: connectionString }
+      - key: X_SECRET_KEY
+        generateValue: true
+      - key: X_ENCRYPTION_KEY       # Fernet key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+        sync: false
+      - key: X_COOKIE_SECURE
+        value: "true"
+      - key: X_EMBEDDED_WORKER
+        value: "false"
+      - key: X_FRONTEND_ORIGIN       # e.g. https://x-web.onrender.com
+        sync: false
+      - key: X_BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: X_BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: X_DEFAULT_MAX_COST_USD
+        value: "0"
+      - key: ANTHROPIC_API_KEY       # optional: stored encrypted in the DB on first start
+        sync: false
+
+  - type: worker
+    name: x-worker
+    runtime: python
+    rootDir: backend
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.worker
+    envVars: *backend_env
+
+  - type: web
+    name: x-web
+    runtime: node
+    rootDir: frontend
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start -- -p $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: 22.18.0
+      - key: X_BACKEND_URL           # public API URL, e.g. https://x-api.onrender.com (used by the /api proxy)
+        sync: false
+      - key: NEXT_PUBLIC_WS_BASE     # e.g. wss://x-api.onrender.com (live execution stream)
+        sync: false

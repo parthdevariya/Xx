@@ -285,6 +285,21 @@ def save_policy(body: PolicyIn, request: Request, db: Session = Depends(get_db),
     return {"ok": True, "id": p.id}
 
 
+@router.delete("/routing-policies/{policy_id}")
+def delete_policy(policy_id: str, request: Request, db: Session = Depends(get_db),
+                  user: User = Depends(require("ai.write"))):
+    p = db.get(AIRoutingPolicy, policy_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Policy not found.")
+    if p.is_default:
+        raise HTTPException(status_code=409, detail="Make another policy the default before deleting this one.")
+    audit(db, actor=user, category="config", action="ai_routing_policy_deleted", target_type="ai_routing_policy",
+          target_id=policy_id, detail={"name": p.name}, request=request)
+    db.delete(p)
+    db.commit()
+    return {"ok": True}
+
+
 @router.post("/route-preview")
 def route_preview(body: dict, db: Session = Depends(get_db), _: User = Depends(require("ai.read"))):
     req = RouteRequest(capability=body.get("capability", "text_reasoning"), category=body.get("category", ""),

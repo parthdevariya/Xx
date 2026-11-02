@@ -102,8 +102,12 @@ def create_framework(body: FrameworkIn, request: Request, db: Session = Depends(
         src = _version(db, body.duplicate_from_version_id)
         src_fw = db.get(IntellectFramework, src.framework_id)
         fw.source_pack = src_fw.source_pack  # keep source integrity checks on duplicates
-        draft = fw_svc.create_draft(db, src, "v1-draft", user.id, notes=f"Duplicated from {src_fw.name} {src.label}")
+        # Created under the source framework with a unique label, then moved to the new framework.
+        draft = fw_svc.create_draft(db, src, f"dup-{fw.id[:12]}", user.id,
+                                    notes=f"Duplicated from {src_fw.name} {src.label}")
         draft.framework_id = fw.id
+        db.flush()
+        draft.label = "v1-draft"
     else:
         db.add(IntellectVersion(framework_id=fw.id, label="v1-draft", status="draft", pipeline=[],
                                 hierarchy=[{"rank": 1, "label": "hard limits and always-on guardrails", "layers": [],
@@ -474,8 +478,12 @@ def get_run(run_id: str, db: Session = Depends(get_db), _: User = Depends(requir
 
 
 @router.get("/conflicts")
-def list_conflicts(limit: int = 100, db: Session = Depends(get_db), _: User = Depends(require("intellect.read"))):
-    rows = db.scalars(select(IntellectConflict).order_by(IntellectConflict.id.desc()).limit(min(limit, 500)))
+def list_conflicts(limit: int = 100, version_id: str | None = None, db: Session = Depends(get_db),
+                   _: User = Depends(require("intellect.read"))):
+    q = select(IntellectConflict).join(IntellectRun, IntellectConflict.run_id == IntellectRun.id)
+    if version_id:
+        q = q.where(IntellectRun.version_id == version_id)
+    rows = db.scalars(q.order_by(IntellectRun.started_at.desc()).limit(min(limit, 500)))
     return [{"run_id": c.run_id, "stage": c.stage_position, "rules": c.rule_codes, "layers": c.layers,
              "description": c.description, "hierarchy_step": c.hierarchy_step, "winner": c.winner,
              "decision": c.decision, "detected_by": c.detected_by} for c in rows]
@@ -551,6 +559,20 @@ def add_case(fid: str, body: CaseIn, request: Request, db: Session = Depends(get
           target_id=fid, detail={"name": body.name}, request=request)
     db.commit()
     return {"id": c.id}
+
+
+@router.put("/test-cases/{cid}")
+def update_case(cid: str, body: CaseIn, request: Request, db: Session = Depends(get_db),
+                user: User = Depends(require("intellect.test"))):
+    c = db.get(IntellectTestCase, cid)
+    if c is None:
+        raise HTTPException(status_code=404, detail="Test case not found.")
+    for k, v in body.model_dump().items():
+        setattr(c, k, v)
+    audit(db, actor=user, category="framework", action="test_case_updated", target_type="intellect_test_case",
+          target_id=cid, detail={"name": body.name}, request=request)
+    db.commit()
+    return {"ok": True}
 
 
 @router.delete("/test-cases/{cid}")

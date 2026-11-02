@@ -44,6 +44,18 @@ def _evidence_for(db: Session, algorithm: str, template: str, n: int) -> list[di
             if e.get("problem") in (template, "*") and e.get("min_vars", 0) <= n <= e.get("max_vars", 10 ** 9)]
 
 
+def missing_fields(template: str | None, data: dict | None) -> list[str]:
+    """Required data keys for a template that are absent, using quantum-os's own pattern definitions."""
+    from qos.intent.patterns import PATTERNS
+    if not template:
+        return []
+    pat = next((p for p in PATTERNS if p.template == template), None)
+    if pat is None:
+        return []
+    data = data or {}
+    return [f"{k}: {pat.field_help.get(k, 'required')}" for k in pat.requires if data.get(k) is None]
+
+
 def evaluate(db: Session, *, template: str | None, data: dict | None, missing: list[str] | None = None,
              mode: str = "hybrid", allow_hardware: bool = False, max_cost_usd: float = 0.0,
              eligibility: str = "evaluate") -> dict:

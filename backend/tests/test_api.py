@@ -211,3 +211,15 @@ def test_admin_dashboard_counts_are_real(api):
 def test_openapi_documented(api):
     spec = api.get("/openapi.json").json()
     assert "/api/executions" in spec["paths"] and "/api/intellect/lab/run" in spec["paths"]
+
+
+def test_duplicate_framework_and_missing_fields(api, seeded):
+    api.login("admin@example.com")
+    fw = seeded.scalar(select(IntellectFramework))
+    for slug in ("copy-one", "copy-two"):  # second duplicate used to collide on the draft label
+        r = api.post("/api/intellect/frameworks", json={"name": slug, "slug": slug,
+                                                        "duplicate_from_version_id": fw.active_version_id})
+        assert r.status_code == 200, r.text
+    d = api.post("/api/quantum/evaluate", json={"template": "knapsack", "data": {"values": [1, 2]}}).json()
+    assert d["decision"] == "insufficient_information"
+    assert any(m.startswith("weights") for m in d["missing"]) and any(m.startswith("capacity") for m in d["missing"])

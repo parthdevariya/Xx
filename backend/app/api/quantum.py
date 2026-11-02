@@ -191,6 +191,7 @@ def templates(_: User = Depends(require("quantum.read"))):
 @router.post("/evaluate")
 def evaluate(body: EvaluateIn, db: Session = Depends(get_db), _: User = Depends(require("quantum.read"))):
     return selection.evaluate(db, template=body.template, data=body.data, mode=body.mode,
+                              missing=selection.missing_fields(body.template, body.data) or None,
                               allow_hardware=body.allow_hardware, max_cost_usd=body.max_cost_usd)
 
 

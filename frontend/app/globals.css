@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ design tokens */
+:root {
+  --bg: #050708;
+  --bg-2: #090c0d;
+  --panel: #0c1011;
+  --panel-2: #10161700;
+  --raised: #121819;
+  --line: rgba(140, 255, 200, 0.08);
+  --line-strong: rgba(140, 255, 200, 0.16);
+  --text: #d6e2db;
+  --text-dim: #93a39b;
+  --muted: #64716b;
+  --green: #3cf59a;
+  --green-dim: #1f8f5a;
+  --cyan: #45d9f5;
+  --blue: #7c8cff;
+  --amber: #ffb84d;
+  --red: #ff5f6d;
+  --ai: var(--cyan);
+  --quantum: var(--blue);
+  --intellect: var(--green);
+  --classical: #c9d3ce;
+  --radius: 10px;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-dim: var(--text-dim);
+  --color-muted: var(--muted);
+  --color-green: var(--green);
+  --color-green-dim: var(--green-dim);
+  --color-cyan: var(--cyan);
+  --color-blue: var(--blue);
+  --color-amber: var(--amber);
+  --color-red: var(--red);
+  --color-ai: var(--ai);
+  --color-quantum: var(--quantum);
+  --color-intellect: var(--intellect);
+  --color-classical: var(--classical);
+  --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-code), ui-monospace, monospace;
+  --font-display: var(--font-display-face), var(--font-ui), sans-serif;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+::selection {
+  background: rgba(60, 245, 154, 0.25);
+  color: #fff;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(140, 255, 200, 0.18) transparent;
+}
+
+/* subtle grid backdrop for the command centre */
+.x-grid {
+  background-image:
+    linear-gradient(rgba(140, 255, 200, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(140, 255, 200, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+}
+
+/* grid + vignette in one layered background so neither overrides the other */
+.x-grid.x-vignette {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse at 50% 30%, rgba(60, 245, 154, 0.06), transparent 60%),
+    radial-gradient(ellipse at 80% 90%, rgba(69, 217, 245, 0.04), transparent 50%),
+    linear-gradient(rgba(140, 255, 200, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(140, 255, 200, 0.035) 1px, transparent 1px);
+  background-size: auto, auto, 48px 48px, 48px 48px;
+}
+
+.x-panel {
+  background: linear-gradient(180deg, rgba(18, 24, 25, 0.92), rgba(10, 14, 15, 0.92));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 20px 40px -24px rgba(0, 0, 0, 0.8);
+}
+
+.x-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.x-glow-text {
+  text-shadow: 0 0 18px rgba(60, 245, 154, 0.35);
+}
+
+@keyframes x-scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+@keyframes x-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.x-cursor::after {
+  content: "▍";
+  margin-left: 2px;
+  color: var(--green);
+  animation: x-blink 1s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+html[data-reduced-motion="true"] *,
+html[data-reduced-motion="true"] *::before,
+html[data-reduced-motion="true"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}

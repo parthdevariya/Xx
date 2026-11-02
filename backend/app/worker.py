@@ -140,5 +140,14 @@ def stop_embedded() -> None:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     from .bootstrap import bootstrap
-    bootstrap(migrate=False)
+    # The API service runs migrations; on a fresh deploy the worker waits until the schema exists.
+    for attempt in range(30):
+        try:
+            bootstrap(migrate=False)
+            break
+        except Exception as e:  # noqa: BLE001
+            log.warning("database not ready (%s); retrying in 5s", str(e).splitlines()[0][:200])
+            time.sleep(5)
+    else:
+        raise SystemExit("database never became ready")
     loop()
