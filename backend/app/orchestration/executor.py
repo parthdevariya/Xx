@@ -514,13 +514,35 @@ def _run_proof(db, execution, structured, template, data, opts, state):
     result = run_proof(db, problem_text=structured.get("problem_text", ""), ai_answer=a["answer"],
                        intellect_answer=it.final_output, rubric=structured.get("rubric"),
                        rules_applied=it.run.summary.get("rules_applied", []), execution_id=execution.id,
-                       user_id=execution.user_id)
+                       user_id=execution.user_id, run_metrics=_arm_metrics(db, execution, it))
     state["proof"] = result
     state["test_provider"] |= bool(result["judge"].get("test_provider"))
     _result(db, execution, "proof", "system", "test" if result["judge"].get("test_provider") else "model_generated",
             "Intellect vs AI — judged proof", result)
     emit(db, execution, "system", "proof.completed", f"Proof: {result['verdict']}",
          {"score": result["score"], "total": result["total"]})
+
+
+def _arm_metrics(db, execution, it) -> dict:
+    """Measured cost, model time and call count for each side of the comparison, from the AI call log."""
+    from ..models import AIExecutionLog
+    logs = db.scalars(select(AIExecutionLog).where(AIExecutionLog.execution_id == execution.id,
+                                                   AIExecutionLog.status != "error")).all()
+
+    def agg(rows):
+        return {"ai_calls": len(rows), "cost_usd": round(sum(r.cost_usd for r in rows), 6),
+                "model_time_s": round(sum(r.latency_ms for r in rows) / 1000, 2),
+                "tokens": sum(r.input_tokens + r.output_tokens for r in rows)}
+    summary = it.run.summary or {}
+    audit = summary.get("guardrail_audit") or {}
+    counts = summary.get("state_counts") or {}
+    return {"ai_only": agg([r for r in logs if r.purpose == "ai_reason"]) | {
+                "stages": 1, "rules_applied": 0, "rules_checked": 0, "guardrail_audit": "none"},
+            "ai_intellect": agg([r for r in logs if r.purpose.startswith("intellect.")]) | {
+                "stages": len(it.stages), "rules_applied": len(summary.get("rules_applied", [])),
+                "rules_checked": sum(counts.values()),
+                "guardrail_audit": ("not performed" if not audit.get("performed") else
+                                    f"{len(audit.get('breaches') or [])} breach(es) flagged")}}
 
 
 def _run_combinations(db, execution, structured, template, data, opts, state):
@@ -619,6 +641,8 @@ def _synthesize(db: Session, execution: Execution, structured: dict, state: dict
                                              "feasible": best.feasible, "violations": best.violations,
                                              "source": f"{best.algorithm} on {best.backend_key}",
                                              "execution_class": best.execution_class}, "computed")
+    elif it and it.final_output:
+        out["detailed_solution"] = _section(it.final_output, gen)
     elif a and a.get("answer"):
         out["detailed_solution"] = _section(a["answer"], gen)
     steps = execution.plan.steps
@@ -658,7 +682,7 @@ def _synthesize(db: Session, execution: Execution, structured: dict, state: dict
         limitations.append("The classical result is heuristic (best found), not proven optimal.")
     if structured.get("method") == "pattern_classifier":
         limitations.append("The problem was classified by keyword patterns because no AI provider was available.")
-    if a and a.get("assumptions"):
+    if a and a.get("assumptions") and not it:
         out["assumptions"] = _section(a["assumptions"], "assumption")
     if structured.get("missing_information"):
         limitations.append("Missing information: " + "; ".join(structured["missing_information"]))
@@ -666,7 +690,7 @@ def _synthesize(db: Session, execution: Execution, structured: dict, state: dict
     if best:
         out["confidence"] = _section("high (verified, proven optimum)" if best.proven_optimal else
                                      "medium (verified feasible; optimality not proven)", "computed")
-    elif a:
+    elif a and not it:
         out["confidence"] = _section(f"model-stated: {a.get('stated_confidence') or 'not stated'}", gen)
     execution.final_output = out
     db.commit()

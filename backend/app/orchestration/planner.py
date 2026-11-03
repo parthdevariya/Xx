@@ -34,7 +34,8 @@ MODE_INFO = {
                 "description": "One model answers directly. The baseline every other mode is compared with."},
     "ai_intellect": {"engines": ["ai", "intellect"], "needs": ["ai"],
                      "description": "The full Intellect framework: 13 ordered stages, protected guardrails, conflict "
-                                    "resolution and a final guardrail audit."},
+                                    "resolution and a final guardrail audit. The same model also answers alone as a "
+                                    "baseline, and a blind judge shows the difference Intellect made."},
     "intellect_vs_ai": {"engines": ["ai", "intellect"], "needs": ["ai"],
                         "description": "AI Only and AI + Intellect answer the same problem independently, then a "
                                        "blind judge scores both against a rubric fixed before the run, plus "
@@ -146,7 +147,12 @@ def plan(db: Session, *, mode: str, problem: dict, allow_hardware: bool = False,
     if mode == "ai_only":
         steps.append(ai_step())
     elif mode == "ai_intellect":
-        steps.append(intellect_step())
+        it_step = intellect_step()
+        if it_step["status"] == "planned":
+            steps.append(ai_step() | {"title": "Without Intellect: AI alone (baseline)"})
+        steps.append(it_step)
+        if it_step["status"] == "planned":
+            steps.append(_step("proof", "system", "Without vs With Intellect: blind judged comparison"))
     elif mode == "intellect_vs_ai":
         steps.append(ai_step() | {"title": "AI Only (independent answer)"})
         steps.append(intellect_step("AI + Intellect (independent answer)"))

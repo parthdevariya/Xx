@@ -179,7 +179,7 @@ export function Results({ execution }: { execution: Execution | null }) {
   const detail = sec(execution, "detailed_solution");
   const tabs: { value: Tab; label: string }[] = [
     ...(hasMatrix ? [{ value: "matrix" as Tab, label: "All combinations" }] : []),
-    ...(hasProof ? [{ value: "proof" as Tab, label: "Intellect vs AI" }] : []),
+    ...(hasProof ? [{ value: "proof" as Tab, label: "Without vs With Intellect" }] : []),
     { value: "summary", label: "Summary" }, { value: "solution", label: "Solution" }, { value: "method", label: "Methodology" },
     { value: "reasoning", label: "Reasoning" }, { value: "calc", label: "Calculations" }, { value: "quantum", label: "Quantum" },
     ...(execution.benchmark ? [{ value: "benchmark" as Tab, label: "Benchmark" }] : []), { value: "raw", label: "Raw" },

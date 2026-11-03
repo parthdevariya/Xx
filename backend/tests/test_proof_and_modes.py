@@ -112,6 +112,34 @@ def test_intellect_vs_ai_proof_end_to_end(api, seeded):
     assert "RL-05" in proof["rules_behind_wins"]
     assert done["result_source"] == "test"
     assert "intellect_proof" in done["final_output"]
+    m = proof["difference"]["metrics"]
+    assert m["ai_only"]["questions"] == 2 and m["ai_intellect"]["questions"] == 0
+    assert m["ai_only"]["ai_calls"] == 1 and m["ai_intellect"]["ai_calls"] >= 13
+    assert m["ai_intellect"]["rules_applied"] == 2
+
+
+def test_ai_intellect_includes_without_intellect_baseline(api, seeded):
+    enable_test_provider(seeded)
+
+    def judge(req):
+        return {"verdicts": [], "bottom_line": "Response 1 and Response 2 differ.",
+                "differences": [{"aspect": "Safety", "response_1": "one", "response_2": "two",
+                                 "why_it_matters": "Response 2 protects the person."}]}
+    register_responder("proof.judge", judge)
+    api.login("user@example.com")
+    ex = api.post("/api/executions", json={"scenario_slug": "ascension-or-alarm", "mode": "ai_intellect"}).json()
+    assert [s["key"] for s in ex["plan"]["steps"] if s["status"] == "planned"] == ["ai_reason", "intellect", "proof",
+                                                                                  "synthesize"]
+    drain_jobs()
+    done = api.get(f"/api/executions/{ex['id']}").json()
+    assert done["status"] == "completed", done["error"]
+    d = next(r for r in done["results"] if r["step"] == "proof")["content"]["difference"]
+    # the judge saw anonymous responses; labels are restored afterwards
+    assert "Response" not in d["bottom_line"] and "Without Intellect" in d["bottom_line"]
+    assert d["differences"][0]["aspect"] == "Safety" and {d["differences"][0]["ai_only"],
+                                                          d["differences"][0]["ai_intellect"]} == {"one", "two"}
+    intellect_text = next(r for r in done["results"] if r["step"] == "intellect")["content"]["final_output"]
+    assert done["final_output"]["executive_summary"]["content"] == intellect_text
 
 
 def test_category_crud(api):

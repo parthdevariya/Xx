@@ -206,5 +206,16 @@ export type ProofResult = {
   judge: { model: string; blind: boolean; order: Record<string, string>; error: string; test_provider: boolean };
   rubric_source: string;
   answers: { ai_only: string; ai_intellect: string };
+  difference?: {
+    bottom_line: string;
+    differences: { aspect: string; ai_only: string; ai_intellect: string; why_it_matters: string }[];
+    metrics: { ai_only: ArmMetrics; ai_intellect: ArmMetrics };
+  };
   method_note: string;
+};
+
+export type ArmMetrics = {
+  words: number; questions: number; paragraphs: number;
+  ai_calls?: number; cost_usd?: number; model_time_s?: number; tokens?: number;
+  stages?: number; rules_applied?: number; rules_checked?: number; guardrail_audit?: string;
 };
