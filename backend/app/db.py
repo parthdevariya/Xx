@@ -35,7 +35,9 @@ def make_engine(url: str) -> Engine:
             cur.execute("PRAGMA busy_timeout=30000")
             cur.close()
         return eng
-    return create_engine(url, pool_pre_ping=True, pool_size=10, max_overflow=10)
+    # Fail fast instead of hanging forever if the database host is wrong or unreachable.
+    return create_engine(url, pool_pre_ping=True, pool_size=10, max_overflow=10,
+                         connect_args={"connect_timeout": 10})
 
 
 def get_engine() -> Engine:

@@ -47,10 +47,19 @@ def bootstrap(migrate: bool = True) -> None:
     problems = get_settings().validate_for_production()
     if problems:
         raise RuntimeError("unsafe production configuration:\n  - " + "\n  - ".join(problems))
-    get_engine()
+    print("[x.bootstrap] configuration ok; connecting to the database", flush=True)
+    from sqlalchemy import text
+    with get_engine().connect() as conn:
+        conn.execute(text("select 1"))
+    print(f"[x.bootstrap] database reachable ({get_engine().dialect.name})", flush=True)
     if migrate:
+        print("[x.bootstrap] running migrations", flush=True)
         run_migrations()
+        print("[x.bootstrap] migrations complete", flush=True)
     from .seed import seed_all
+    print("[x.bootstrap] seeding (framework, providers, scenarios)", flush=True)
     with session_scope() as db:
         seed_all(db)
+    print("[x.bootstrap] seed complete", flush=True)
     ensure_admin()
+    print("[x.bootstrap] ready", flush=True)
