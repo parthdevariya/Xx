@@ -47,7 +47,18 @@ class Settings(BaseSettings):
             if not self.encryption_key:
                 problems.append("X_ENCRYPTION_KEY must be set (Fernet key)")
             if self.is_sqlite:
-                problems.append("DATABASE_URL must point to PostgreSQL in production")
+                import os
+                raw = os.environ.get("DATABASE_URL")
+                similar = sorted(k for k in os.environ if "DATABASE" in k.upper() or "POSTGRES" in k.upper()
+                                 or k.upper().startswith("DB"))
+                if raw is None:
+                    detail = "DATABASE_URL is not set on this service"
+                elif not raw.strip():
+                    detail = "DATABASE_URL is set but empty"
+                else:
+                    detail = f"DATABASE_URL is set but uses scheme '{raw.split(':', 1)[0][:20]}'"
+                problems.append("DATABASE_URL must point to PostgreSQL in production (" + detail
+                                + (f"; similarly named variables present: {similar}" if similar else "") + ")")
             if not self.cookie_secure:
                 problems.append("X_COOKIE_SECURE must be true in production")
         return problems
