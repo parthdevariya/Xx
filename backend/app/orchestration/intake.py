@@ -114,6 +114,7 @@ def intake(db: Session, *, text: str, inputs: dict, scenario: Scenario | None, a
             "missing_information": [], "complexity": _complexity(template, data),
             "solver_template": template, "template_data": data, "problem_text": problem_text,
             "quantum_eligibility": v.quantum_eligibility, "scenario_name": v.name,
+            "rubric": (v.benchmark_config or {}).get("rubric") or [],
         }
 
     full_text = text.strip() + (f"\n\nAttached material:\n{attachments_text}" if attachments_text else "")

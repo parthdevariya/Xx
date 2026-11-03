@@ -262,3 +262,59 @@ def seed_scenarios(db: Session) -> None:
                                        default_mode="hybrid" if "hybrid" in modes else modes[-1]))
         sc.current_version_id = v.id
     db.flush()
+
+
+def seed_proof_scenarios(db: Session) -> None:
+    """Intellect Proof Lab + Computation-and-Judgment scenarios; retire the original library once."""
+    from ..models import SystemSetting
+    from .proof_seed import ALL_MODES as P_ALL, CATEGORIES as P_CATS, PROOF_SCENARIOS, REASONING_MODES
+
+    cats = {c.slug: c for c in db.scalars(select(ScenarioCategory))}
+    base = len(cats)
+    for i, (slug, name, desc, notice) in enumerate(P_CATS):
+        if slug not in cats:
+            cats[slug] = ScenarioCategory(slug=slug, name=name, description=desc, notice=notice, position=-10 + i)
+            db.add(cats[slug])
+    db.flush()
+    for pos, s in enumerate(PROOF_SCENARIOS):
+        if db.scalar(select(Scenario).where(Scenario.slug == s["slug"])):
+            continue
+        solver = s.get("solver", "")
+        sc = Scenario(slug=s["slug"], category_id=cats[s["category"]].id, status="published", is_demo=s["demo"],
+                      position=-100 + pos)
+        db.add(sc)
+        db.flush()
+        engines = ["classical", "quantum", "ai", "intellect"] if solver else ["ai", "intellect"]
+        v = ScenarioVersion(
+            scenario_id=sc.id, version_no=1, name=s["name"], tagline=s["tagline"], description=s["description"],
+            problem_statement=s.get("problem_statement", "Respond to the situation below."),
+            demonstrates=s["demonstrates"], solver_template=solver, engines=engines,
+            expected_output="Side-by-side AI Only vs AI + Intellect answers, a blind rubric score, the rules behind "
+                            "the difference" + ("; plus the proven optimum and quantum comparison" if solver else ""),
+            visualizations=["proof_scoreboard", "intellect_trace"] + (["benchmark_bars"] if solver else []),
+            recommended_framework_slug="x-layers", quantum_eligibility="evaluate" if solver else "never",
+            benchmark_config={"approaches": ["ai_only", "ai_intellect"] + (["classical", "quantum_simulation"]
+                                                                           if solver else []),
+                              "rubric": s["rubric"]})
+        db.add(v)
+        db.flush()
+        fields = s.get("fields") or [{"key": "situation", "label": "The situation (edit freely)",
+                                      "type": "textarea", "required": True}]
+        defaults = s.get("defaults") or {"situation": s["situation"]}
+        db.add(ScenarioInputSchema(version_id=v.id, fields=fields, defaults=defaults))
+        modes = P_ALL if solver else REASONING_MODES
+        db.add(ScenarioExecutionPolicy(scenario_id=sc.id, allowed_modes=modes,
+                                       default_mode="benchmark" if solver else "intellect_vs_ai"))
+        sc.current_version_id = v.id
+    flag = db.get(SystemSetting, "scenario_library")
+    if flag is None or (flag.value or {}).get("version", 1) < 2:
+        legacy = {s["slug"] for s in SCENARIOS}
+        for sc in db.scalars(select(Scenario).where(Scenario.slug.in_(legacy), Scenario.status == "published")):
+            sc.status = "retired"
+        if flag is None:
+            db.add(SystemSetting(key="scenario_library", value={"version": 2},
+                                 description="Library v2: Intellect Proof scenarios; original scenarios retired "
+                                             "(re-publish from Admin → Scenarios if needed)."))
+        else:
+            flag.value = {"version": 2}
+    db.flush()

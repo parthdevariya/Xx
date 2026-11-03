@@ -334,7 +334,7 @@ def _run_intellect(db, execution, structured, template, data, opts, state):
         return
     evidence = ""
     computed = {k: state[k].to_dict() for k in ("classical", "quantum") if k in state}
-    if computed and execution.mode == "hybrid":
+    if computed and execution.mode in ("hybrid", "classical_intellect"):
         lines = []
         for k, o in computed.items():
             lines.append(f"{k} ({o['execution_class']}, {o['algorithm']}): answer={json.dumps(o['answer'])[:1500]}; "
@@ -429,7 +429,14 @@ def _run_benchmark(db, execution, structured, template, data, opts, state):
         if template:
             m("ai_intellect", "objective_value", text="not comparable",
               notes="Intellect produces a reasoned recommendation, not a scored solution")
+    pr = state.get("proof")
+    if pr:
+        for lab in ("ai_only", "ai_intellect"):
+            m(lab, "rubric_score", pr["score"][lab], unit=f"of {pr['total']}",
+              notes="blind judge + deterministic checks against the scenario rubric")
     conclusion = []
+    if pr:
+        conclusion.append(f"Judged proof: {pr['verdict']}")
     if t and scored:
         feasible = [x for x in scored if x[2]]
         if feasible:
@@ -454,7 +461,29 @@ def _run_benchmark(db, execution, structured, template, data, opts, state):
     emit(db, execution, "system", "benchmark.completed", f"Benchmark completed: {run.conclusion}", {"run_id": run.id})
 
 
+def _run_proof(db, execution, structured, template, data, opts, state):
+    from .proof import run_proof
+    a, it = state.get("ai"), state.get("intellect")
+    if not a or not a.get("answer") or not it or not it.final_output:
+        emit(db, execution, "system", "step.skipped",
+             "Judged comparison skipped: it needs both an AI Only answer and an AI + Intellect answer", {})
+        return
+    emit(db, execution, "system", "proof.started", "Blind judged comparison started: two anonymous responses, "
+         f"{len(structured.get('rubric') or []) or 'default'} criteria fixed before the run", {})
+    result = run_proof(db, problem_text=structured.get("problem_text", ""), ai_answer=a["answer"],
+                       intellect_answer=it.final_output, rubric=structured.get("rubric"),
+                       rules_applied=it.run.summary.get("rules_applied", []), execution_id=execution.id,
+                       user_id=execution.user_id)
+    state["proof"] = result
+    state["test_provider"] |= bool(result["judge"].get("test_provider"))
+    _result(db, execution, "proof", "system", "test" if result["judge"].get("test_provider") else "model_generated",
+            "Intellect vs AI — judged proof", result)
+    emit(db, execution, "system", "proof.completed", f"Proof: {result['verdict']}",
+         {"score": result["score"], "total": result["total"]})
+
+
 STEP_RUNNERS = {
+    "proof": _run_proof,
     "classical": _run_classical,
     "quantum": _run_quantum,
     "ai_reason": _ai_reason,
@@ -490,7 +519,14 @@ def _synthesize(db: Session, execution: Execution, structured: dict, state: dict
             best = (max if t.sense == "max" else min)(cands, key=lambda o: o.objective_value)
             if c and best is not c and c.feasible and abs((c.objective_value or 0) - best.objective_value) < 1e-9:
                 best = c  # on a tie, report the classical (proven) answer
-    if it and it.final_output:
+    pr = state.get("proof")
+    if pr:
+        out["intellect_proof"] = _section(pr, gen)
+    if pr and execution.mode == "intellect_vs_ai":
+        behind = pr["rules_behind_wins"]
+        summary = _section(pr["verdict"] + (f"\n\nRules behind the difference: {', '.join(behind)}" if behind else ""),
+                           gen)
+    elif it and it.final_output:
         summary = _section(it.final_output, gen)
     elif best:
         summary = _section(f"{best.algorithm} on {best.backend_key} found a feasible solution with objective "

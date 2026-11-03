@@ -56,7 +56,7 @@ export function Insights({ execution }: { execution: Execution | null }) {
 }
 
 // Live step status from recorded events (the stored plan is the pre-run snapshot).
-const STEP_EVENTS: Record<string, { done: RegExp; active: RegExp }> = {
+export const STEP_EVENTS: Record<string, { done: RegExp; active: RegExp }> = {
   classical: { done: /^classical\.completed$/, active: /^classical\.started$/ },
   quantum: { done: /^quantum\.(completed|unavailable)$/, active: /^quantum\.job_submitted$/ },
   ai_reason: { done: /^ai\.(completed|unavailable)$/, active: /^ai\.started$/ },
@@ -66,7 +66,7 @@ const STEP_EVENTS: Record<string, { done: RegExp; active: RegExp }> = {
   synthesize: { done: /^execution\.completed$/, active: /^$/ },
 };
 
-function liveStatus(step: PlanStep, events: ExecEvent[], execStatus: string): string {
+export function liveStatus(step: PlanStep, events: ExecEvent[], execStatus: string): string {
   if (step.status !== "planned") return step.status;
   const m = STEP_EVENTS[step.key];
   if (m && events.some((e) => m.done.test(e.type))) return "completed";

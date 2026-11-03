@@ -15,10 +15,48 @@ from ..quantum import selection
 MODES = {
     "ai_only": "AI Only",
     "ai_intellect": "AI + Intellect",
+    "intellect_vs_ai": "Intellect vs AI (judged proof)",
     "classical": "Classical Computation",
+    "quantum": "Quantum Only",
+    "classical_quantum": "Classical vs Quantum",
+    "ai_classical": "AI + Classical",
+    "classical_intellect": "Classical + Intellect",
     "ai_quantum": "AI + Quantum",
     "hybrid": "Full Hybrid X",
     "benchmark": "Comparative Benchmark",
+}
+
+# What each mode runs — shown to administrators and users.
+MODE_INFO = {
+    "ai_only": {"engines": ["ai"], "needs": ["ai"],
+                "description": "One model answers directly. The baseline every other mode is compared with."},
+    "ai_intellect": {"engines": ["ai", "intellect"], "needs": ["ai"],
+                     "description": "The full Intellect framework: 13 ordered stages, protected guardrails, conflict "
+                                    "resolution and a final guardrail audit."},
+    "intellect_vs_ai": {"engines": ["ai", "intellect"], "needs": ["ai"],
+                        "description": "AI Only and AI + Intellect answer the same problem independently, then a "
+                                       "blind judge scores both against a rubric fixed before the run, plus "
+                                       "deterministic checks. Shows which rules made the difference."},
+    "classical": {"engines": ["classical"], "needs": ["solver"],
+                  "description": "Classical solver only: exhaustive search (proven optimum) or heuristics."},
+    "quantum": {"engines": ["quantum"], "needs": ["solver"],
+                "description": "Quantum algorithm only, on the best available simulator or hardware."},
+    "classical_quantum": {"engines": ["classical", "quantum"], "needs": ["solver"],
+                          "description": "Classical and quantum on the same encoding, scored by the same true "
+                                         "objective, with a benchmark report. No AI involved."},
+    "ai_classical": {"engines": ["classical", "ai"], "needs": ["solver", "ai"],
+                     "description": "Classical computation, then AI explains the verified result."},
+    "classical_intellect": {"engines": ["classical", "intellect", "ai"], "needs": ["solver", "ai"],
+                            "description": "Computation plus judgment: the verified optimum is reviewed by the "
+                                           "Intellect framework, which can flag what the optimiser cannot see."},
+    "ai_quantum": {"engines": ["quantum", "classical", "ai"], "needs": ["solver"],
+                   "description": "Quantum study with a classical reference and AI interpretation."},
+    "hybrid": {"engines": ["quantum", "classical", "intellect", "ai"], "needs": ["solver|ai"],
+               "description": "Everything that applies: quantum if suitable, classical, then Intellect review of "
+                              "the computed evidence."},
+    "benchmark": {"engines": ["quantum", "classical", "ai", "intellect"], "needs": ["solver|ai"],
+                  "description": "Every eligible approach runs independently on the same input and is compared; "
+                                 "includes the judged Intellect-vs-AI proof when a rubric exists."},
 }
 
 
@@ -89,8 +127,27 @@ def plan(db: Session, *, mode: str, problem: dict, allow_hardware: bool = False,
         steps.append(ai_step())
     elif mode == "ai_intellect":
         steps.append(intellect_step())
+    elif mode == "intellect_vs_ai":
+        steps.append(ai_step() | {"title": "AI Only (independent answer)"})
+        steps.append(intellect_step("AI + Intellect (independent answer)"))
+        steps.append(_step("proof", "system", "Blind judged comparison against the rubric",
+                           "planned" if ai_ok else "skipped", "" if ai_ok else no_ai))
     elif mode == "classical":
         steps.append(classical_step())
+    elif mode == "quantum":
+        steps += quantum_steps(force_study=True)
+    elif mode == "classical_quantum":
+        steps += quantum_steps(force_study=True)
+        steps.append(classical_step())
+        steps.append(_step("benchmark", "system", "Classical vs quantum benchmark"))
+    elif mode == "ai_classical":
+        steps.append(classical_step())
+        steps.append(_step("ai_explain", "ai", "AI interpretation of the verified result",
+                           "planned" if ai_ok and computable else "skipped",
+                           no_ai if not ai_ok else no_solver))
+    elif mode == "classical_intellect":
+        steps.append(classical_step())
+        steps.append(intellect_step("Intellect review of the computed evidence"))
     elif mode == "ai_quantum":
         steps += quantum_steps(force_study=True)
         steps.append(classical_step() | {"title": "Classical reference for comparison"})
@@ -106,6 +163,8 @@ def plan(db: Session, *, mode: str, problem: dict, allow_hardware: bool = False,
         steps.append(classical_step())
         steps.append(ai_step() | {"title": "AI Only (independent attempt)"})
         steps.append(intellect_step("AI + Intellect (independent attempt)"))
+        if ai_ok and problem.get("rubric"):
+            steps.append(_step("proof", "system", "Blind judged comparison against the rubric"))
         steps.append(_step("benchmark", "system", "Benchmark comparison"))
     steps.append(_step("synthesize", "system", "Final result and report"))
 
@@ -118,5 +177,5 @@ def plan(db: Session, *, mode: str, problem: dict, allow_hardware: bool = False,
         "estimates": {"ai_calls": ai_calls,
                       "quantum_cost_usd": decision.get("route", {}).get("est_cost_usd", 0.0) if q else 0.0},
         "baselines": ["classical"] if computable else [],
-        "runnable": any(s["key"] not in ("synthesize", "benchmark") for s in planned),
+        "runnable": any(s["key"] not in ("synthesize", "benchmark", "proof") for s in planned),
     }

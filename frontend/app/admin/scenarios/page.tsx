@@ -9,6 +9,11 @@ import { api } from "@/lib/api";
 import { MODE_LABELS, type Scenario } from "@/lib/types";
 
 type Category = { slug: string; name: string; description: string; notice: string };
+type ManagedCategory = Category & { id: string; position: number; scenario_count: number };
+type Draft = Partial<Scenario> & {
+  suggested_policy?: { allowed_modes: string[]; default_mode: string };
+  _generated_by: string; _test_provider: boolean; _warnings: string[];
+};
 const FIELD_TYPES = ["number", "text", "textarea", "matrix", "list_number", "list_text", "json"];
 const ENGINES = ["ai", "intellect", "classical", "quantum"];
 
@@ -20,10 +25,17 @@ export default function ScenarioAdmin() {
   const [edit, setEdit] = useState<Scenario | "new" | null>(null);
   const [policy, setPolicy] = useState<Scenario | null>(null);
   const [versions, setVersions] = useState<{ s: Scenario; rows: { id: string; version_no: number; name: string; created_at: string }[] } | null>(null);
+  const [showCats, setShowCats] = useState(false);
+  const [showGen, setShowGen] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
   return (
     <div>
       <PageHeader title="Scenario Management" subtitle="Scenarios are database records. Creating or editing one needs no code change; every edit creates a new version."
-        actions={<Button variant="primary" onClick={() => setEdit("new")}>New scenario</Button>} />
+        actions={<>
+          <Button onClick={() => setShowCats(true)}>Categories</Button>
+          <Button onClick={() => setShowGen(true)}>✦ Generate with AI</Button>
+          <Button variant="primary" onClick={() => setEdit("new")}>New scenario</Button>
+        </>} />
       <ErrorNote error={list.error || act.error} className="mb-3" />
       {list.loading && !list.data ? <Spinner /> : list.data && (list.data.length === 0 ? <Empty>No scenarios.</Empty> : (
         <Table head={["Scenario", "Category", "Status", "Solver", "Quantum", "Modes", "Version", ""]}>
@@ -49,6 +61,9 @@ export default function ScenarioAdmin() {
         </Table>
       ))}
       {edit && cats.data && <ScenarioModal scenario={edit === "new" ? null : edit} cats={cats.data} templates={templates.data ?? []} onClose={() => setEdit(null)} onDone={() => { setEdit(null); list.reload(); }} />}
+      {showCats && <CategoriesModal onClose={() => { setShowCats(false); cats.reload(); list.reload(); }} />}
+      {showGen && cats.data && <GenerateModal cats={cats.data} onClose={() => setShowGen(false)} onDraft={(d) => { setShowGen(false); setDraft(d); }} />}
+      {draft && cats.data && <ScenarioForm s={null} draft={draft} cats={cats.data} templates={templates.data ?? []} act={act} onClose={() => setDraft(null)} onDone={() => { setDraft(null); list.reload(); }} />}
       {policy && <PolicyModal s={policy} onClose={() => setPolicy(null)} onDone={() => { setPolicy(null); list.reload(); }} />}
       {versions && (
         <Modal open onClose={() => setVersions(null)} title={`Versions — ${versions.s.name}`}>
@@ -68,10 +83,13 @@ function ScenarioModal({ scenario, cats, templates, onClose, onDone }: {
   return <ScenarioForm s={full.data} cats={cats} templates={templates} act={act} onClose={onClose} onDone={onDone} />;
 }
 
-function ScenarioForm({ s, cats, templates, act, onClose, onDone }: {
-  s: Scenario | null; cats: Category[]; templates: { name: string; description: string }[]; act: ReturnType<typeof useAction>; onClose: () => void; onDone: () => void;
+function ScenarioForm({ s: existing, draft, cats, templates, act, onClose, onDone }: {
+  s: Scenario | null; draft?: Draft; cats: Category[]; templates: { name: string; description: string }[]; act: ReturnType<typeof useAction>; onClose: () => void; onDone: () => void;
 }) {
+  const s = existing ?? (draft as unknown as Scenario | undefined) ?? null;
+  const isNew = !existing;
   const [f, setF] = useState({
+    rubric: JSON.stringify(s?.benchmark_config?.rubric ?? [], null, 2),
     slug: s?.slug ?? "", category: s?.category.slug ?? cats[0]?.slug ?? "", name: s?.name ?? "", tagline: s?.tagline ?? "",
     description: s?.description ?? "", problem_statement: s?.problem_statement ?? "", context: s?.context ?? "",
     demonstrates: s?.demonstrates ?? "", solver_template: s?.solver_template ?? "", quantum_eligibility: s?.quantum_eligibility ?? "evaluate",
@@ -93,17 +111,29 @@ function ScenarioForm({ s, cats, templates, act, onClose, onDone }: {
         context: f.context, demonstrates: f.demonstrates, solver_template: f.solver_template, quantum_eligibility: f.quantum_eligibility,
         engines: f.engines, expected_output: f.expected_output, visualizations: f.visualizations.split(",").map((x) => x.trim()).filter(Boolean),
         is_demo: f.is_demo, fields, defaults: parseJson(f.defaults, "Defaults"),
+        benchmark_config: { ...(s?.benchmark_config ?? {}), rubric: parseJson(f.rubric, "Rubric") },
       };
-      if (s) await api.put(`/scenarios/${s.id}`, body);
-      else await api.post("/scenarios", body);
+      if (!isNew) await api.put(`/scenarios/${existing!.id}`, body);
+      else {
+        const created = await api.post<Scenario>("/scenarios", body);
+        if (draft?.suggested_policy) {
+          await api.put(`/scenarios/${created.id}/policy`, { ...draft.suggested_policy, max_cost_usd: 0, allow_quantum_hardware: false, demo_enabled: true });
+        }
+      }
       onDone();
     });
   }
   return (
-    <Modal open wide onClose={onClose} title={s ? `Edit ${s.name} (saves v${(s.version_no ?? 0) + 1})` : "New scenario (draft)"}>
+    <Modal open wide onClose={onClose} title={!isNew ? `Edit ${s!.name} (saves v${(s!.version_no ?? 0) + 1})` : draft ? "Review generated scenario (saves as draft)" : "New scenario (draft)"}>
+      {draft && (
+        <div className="mb-3 space-y-2">
+          <Notice tone={draft._test_provider ? "warn" : "info"}>Generated by {draft._generated_by}{draft._test_provider ? " — TEST PROVIDER placeholder, not real model output" : ""}. Review every field; nothing is saved until you press Save, and it saves as a draft.</Notice>
+          {draft._warnings.length > 0 && <Notice tone="warn">{draft._warnings.join(" · ")}</Notice>}
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name"><Input value={f.name} onChange={set("name")} /></Field>
-        <Field label="Slug"><Input value={f.slug} onChange={set("slug")} disabled={!!s} /></Field>
+        <Field label="Slug"><Input value={f.slug} onChange={set("slug")} disabled={!isNew} /></Field>
         <Field label="Category"><Select value={f.category} onChange={set("category")} options={cats.map((c) => ({ value: c.slug, label: c.name }))} /></Field>
         <Field label="Tagline"><Input value={f.tagline} onChange={set("tagline")} /></Field>
         <Field label="Solver template" hint="Empty for reasoning-only scenarios"><Select value={f.solver_template} onChange={set("solver_template")} options={[{ value: "", label: "(none — AI + Intellect only)" }, ...templates.map((t) => ({ value: t.name, label: `${t.name} — ${t.description}` }))]} /></Field>
@@ -118,6 +148,9 @@ function ScenarioForm({ s, cats, templates, act, onClose, onDone }: {
         <Field label="Input fields (JSON array)" className="sm:col-span-2" hint={`Each: {"key","label","type","required","min","max","help"}; type ∈ ${FIELD_TYPES.join(", ")}. For solver scenarios the keys must match the template's data.`}>
           <Textarea className="min-h-40 font-mono text-xs" value={f.fields} onChange={set("fields")} /></Field>
         <Field label="Default values (JSON object)" className="sm:col-span-2"><Textarea className="min-h-32 font-mono text-xs" value={f.defaults} onChange={set("defaults")} /></Field>
+        <Field label="Evaluation rubric (JSON array) — used by Intellect vs AI and Benchmark" className="sm:col-span-2"
+          hint={'Each: {"id","criterion","why","related_rules":["RL-03"],"check":{"type":"judge"|"max_questions"|"must_not_contain","value":…}}. Fixed before any run; the judge never sees which system wrote an answer.'}>
+          <Textarea className="min-h-40 font-mono text-xs" value={f.rubric} onChange={set("rubric")} /></Field>
         <Toggle checked={f.is_demo} onChange={(v) => setF({ ...f, is_demo: v })} label="Curated demo scenario" />
       </div>
       <ErrorNote error={act.error} className="mt-3" />
@@ -148,6 +181,87 @@ function PolicyModal({ s, onClose, onDone }: { s: Scenario; onClose: () => void;
             <Button variant="primary" loading={act.busy === "s"} onClick={() => act.run("s", async () => { await api.put(`/scenarios/${s.id}/policy`, v); onDone(); })}>Save policy</Button></div>
         </div>
       )}
+    </Modal>
+  );
+}
+
+
+function CategoriesModal({ onClose }: { onClose: () => void }) {
+  const act = useAction();
+  const list = useAsync(() => api.get<ManagedCategory[]>("/scenario-categories/manage"));
+  const blank = { id: "", slug: "", name: "", description: "", notice: "", position: 0 };
+  const [f, setF] = useState(blank);
+  async function save() {
+    const body = { slug: f.slug, name: f.name, description: f.description, notice: f.notice, position: Number(f.position) || 0 };
+    const ok = await act.run("s", () => f.id ? api.put(`/scenario-categories/${f.id}`, body) : api.post("/scenario-categories", body));
+    if (ok) { setF(blank); list.reload(); }
+  }
+  return (
+    <Modal open wide onClose={onClose} title="Scenario categories">
+      <ErrorNote error={list.error || act.error} className="mb-3" />
+      {list.loading && !list.data ? <Spinner /> : (
+        <Table head={["Category", "Slug", "Scenarios", "Notice", ""]}>
+          {(list.data ?? []).map((c) => (
+            <tr key={c.id}>
+              <Td><div className="font-medium">{c.name}</div><div className="text-xs text-muted">{c.description}</div></Td>
+              <Td mono>{c.slug}</Td>
+              <Td mono>{c.scenario_count}</Td>
+              <Td className="max-w-[200px] text-xs text-amber">{c.notice}</Td>
+              <Td className="whitespace-nowrap">
+                <Button size="sm" variant="ghost" onClick={() => setF({ id: c.id, slug: c.slug, name: c.name, description: c.description, notice: c.notice, position: c.position })}>Edit</Button>
+                <Button size="sm" variant="ghost" className="text-red" disabled={c.scenario_count > 0} title={c.scenario_count ? "Move its scenarios first" : undefined}
+                  onClick={async () => { if (window.confirm(`Delete category ${c.name}?`)) { await act.run("d", () => api.del(`/scenario-categories/${c.id}`)); list.reload(); } }}>Delete</Button>
+              </Td>
+            </tr>
+          ))}
+        </Table>
+      )}
+      <div className="mt-4 rounded-[3px] border border-line p-3">
+        <div className="x-label mb-2">{f.id ? "Edit category" : "Add category"}</div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Name"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value, slug: f.id ? f.slug : e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") })} /></Field>
+          <Field label="Slug"><Input value={f.slug} onChange={(e) => setF({ ...f, slug: e.target.value })} /></Field>
+          <Field label="Description" className="sm:col-span-2"><Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+          <Field label="Mandatory notice (shown on every scenario in this category)" className="sm:col-span-2"><Input value={f.notice} onChange={(e) => setF({ ...f, notice: e.target.value })} /></Field>
+          <Field label="Display order"><Input type="number" value={f.position} onChange={(e) => setF({ ...f, position: Number(e.target.value) })} /></Field>
+        </div>
+        <div className="mt-3 flex justify-end gap-2">
+          {f.id && <Button variant="ghost" onClick={() => setF(blank)}>Cancel edit</Button>}
+          <Button variant="primary" loading={act.busy === "s"} disabled={!f.name || !f.slug} onClick={save}>{f.id ? "Save category" : "Add category"}</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function GenerateModal({ cats, onClose, onDraft }: { cats: Category[]; onClose: () => void; onDraft: (d: Draft) => void }) {
+  const act = useAction();
+  const models = useAsync(() => api.get<{ id: string; label: string; is_test: boolean }[]>("/scenarios/generator/models"));
+  const [f, setF] = useState({ brief: "", category: cats.find((c) => c.slug === "intellect-proof")?.slug ?? cats[0]?.slug ?? "", kind: "reasoning", model_id: "" });
+  return (
+    <Modal open wide onClose={onClose} title="Generate a scenario with AI">
+      <div className="space-y-3">
+        <p className="text-sm text-dim">Describe the situation you want to test. The model drafts a realistic scenario with traps a plain AI answer tends to fall into, plus a rubric grounded in real X Layers rule IDs. You review it and save it as a draft.</p>
+        {models.data && models.data.length === 0 && <Notice tone="warn">No AI model is configured. Add an Anthropic or OpenAI key in AI Management first.</Notice>}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Model"><Select value={f.model_id} onChange={(e) => setF({ ...f, model_id: e.target.value })}
+            options={[{ value: "", label: "Best available (routing policy)" }, ...(models.data ?? []).map((m) => ({ value: m.id, label: m.label + (m.is_test ? " (test)" : "") }))]} /></Field>
+          <Field label="Category"><Select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} options={cats.map((c) => ({ value: c.slug, label: c.name }))} /></Field>
+          <Field label="Type"><Select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}
+            options={[{ value: "reasoning", label: "Reasoning trap (Intellect vs AI)" }, { value: "computation", label: "Computation + judgment (solver + Intellect)" }]} /></Field>
+        </div>
+        <Field label="Brief" hint="e.g. 'A hospital administrator wants to cut night staff to hit a budget; the optimiser says it is cheapest, but patient-safety signals are buried in the details.'">
+          <Textarea rows={5} value={f.brief} onChange={(e) => setF({ ...f, brief: e.target.value })} maxLength={4000} />
+        </Field>
+        <ErrorNote error={act.error || models.error} />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={act.busy === "g"} disabled={f.brief.trim().length < 10} onClick={async () => {
+            const d = await act.run("g", () => api.post<Draft>("/scenarios/generate", { ...f, model_id: f.model_id || null }));
+            if (d) onDraft(d);
+          }}>Generate draft</Button>
+        </div>
+      </div>
     </Modal>
   );
 }

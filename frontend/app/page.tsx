@@ -12,6 +12,10 @@ import { ScenarioLibrary } from "@/components/command/ScenarioLibrary";
 import { engineStates, useExecution } from "@/components/command/useExecution";
 import { RequireAuth } from "@/components/RequireAuth";
 import { Badge, Button, ErrorNote, Notice, Panel, StatusDot, Toggle, cx, fmtTime } from "@/components/ui";
+import { GlitchText } from "@/components/fx/GlitchText";
+import { MatrixRain } from "@/components/fx/MatrixRain";
+import { ProcessTimeline } from "@/components/fx/ProcessTimeline";
+import { Clock } from "@/components/fx/Telemetry";
 import { Wordmark } from "@/components/XMark";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -132,13 +136,18 @@ function CommandCentre() {
 
   return (
     <div className="x-grid x-vignette min-h-dvh">
+      {!reducedMotion && <MatrixRain opacity={running ? 0.16 : 0.1} />}
       {showIntro && <InitSequence reducedMotion={reducedMotion} onDone={(s) => { setStatus(s); setIntroDone(true); }} />}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-bg/85 px-4 backdrop-blur">
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-green/15 bg-bg/85 px-4 backdrop-blur">
         <div className="flex items-center gap-5">
           <Wordmark />
+          <span className="hidden border-l border-green/20 pl-3 font-mono text-[11px] tracking-[0.3em] lg:inline x-phosphor">
+            <GlitchText text="COMMAND CENTRE" />
+          </span>
           <EnginePills status={status} />
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <span className="hidden sm:inline"><Clock /></span>
           <Toggle checked={demo} onChange={setDemo} label="Demo mode" />
           {can("dashboard.read") && <Link href="/admin" className="text-dim hover:text-green">Admin</Link>}
           <div className="relative">
@@ -156,7 +165,7 @@ function CommandCentre() {
         </div>
       </header>
 
-      <main id="main" className="mx-auto max-w-[1680px] space-y-4 p-4">
+      <main id="main" className="x-above-rain mx-auto max-w-[1680px] space-y-4 p-4">
         {demo && (
           <Notice className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span className="font-medium text-text">Demo Mode</span>
@@ -188,13 +197,16 @@ function CommandCentre() {
 
           <div className="space-y-4">
             <Panel title="X computational core" actions={execution ? <Badge>{execution.mode_label}</Badge> : null}>
-              <div className="grid items-center gap-4 lg:grid-cols-[minmax(0,340px)_1fr]">
-                <Core states={states} running={running} reducedMotion={reducedMotion} />
+              <div className="grid items-center gap-4 lg:grid-cols-[minmax(0,400px)_1fr]">
+                <Core states={states} running={running} reducedMotion={reducedMotion} events={cached ? [] : live.events} />
                 <div className="min-w-0">
                   {execution?.plan ? <PlanView execution={execution} events={cached ? [] : live.events} onRun={runPlan} />
                     : <p className="text-sm text-muted">Choose a scenario or describe a problem. X classifies it, plans which engines apply — and says when quantum computation does not — then runs the plan and records every step.</p>}
                 </div>
               </div>
+            </Panel>
+            <Panel title="Process track" actions={running ? <Badge tone="cyan">live</Badge> : null}>
+              <ProcessTimeline execution={execution} events={cached ? [] : live.events} reducedMotion={reducedMotion} />
             </Panel>
             <Panel title="Live execution console" className="h-[340px]" bodyClass="flex min-h-0 flex-col">
               <LiveConsole events={cached ? [] : live.events} transport={live.transport} status={execution?.status} />

@@ -62,11 +62,12 @@ def seed_all(db: Session) -> None:
     from .ai.seed import seed_ai
     from .intellect.frameworks import seed_source_framework
     from .quantum.seed import seed_quantum
-    from .scenarios.seed import seed_scenarios
+    from .scenarios.seed import seed_proof_scenarios, seed_scenarios
 
     seed_roles(db)
     seed_source_framework(db)
     seed_ai(db)
     seed_quantum(db)
     seed_scenarios(db)
+    seed_proof_scenarios(db)
     db.flush()

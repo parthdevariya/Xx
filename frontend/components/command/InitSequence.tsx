@@ -2,6 +2,8 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { GlitchText } from "@/components/fx/GlitchText";
+import { MatrixRain } from "@/components/fx/MatrixRain";
 import { XMark } from "@/components/XMark";
 import { api } from "@/lib/api";
 import type { SystemStatus } from "@/lib/types";
@@ -61,36 +63,44 @@ export function InitSequence({ onDone, reducedMotion }: { onDone: (s: SystemStat
   return (
     <AnimatePresence>
       <motion.div key="init" initial={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.6 }}
-        className="x-grid x-vignette fixed inset-0 z-50 flex items-center justify-center bg-bg px-4" role="status" aria-live="polite">
-        <div className="w-full max-w-xl">
+        className="fixed inset-0 z-50 flex items-center justify-center bg-bg px-4" role="status" aria-live="polite">
+        {!reducedMotion && <MatrixRain opacity={0.22} />}
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,#050708_75%)]" />
+        <div className="x-panel x-scanlines relative w-full max-w-xl p-6 sm:p-8">
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }}
-            className="mb-8 flex items-center gap-4">
+            className="mb-7 flex items-center gap-4">
             <XMark size={52} />
             <div>
-              <div className="font-display text-3xl font-semibold tracking-[0.5em] text-text x-glow-text">X</div>
-              <div className="x-label">AI · Quantum · Intellect</div>
+              <GlitchText text="X" className="font-display text-3xl font-semibold tracking-[0.5em] x-phosphor" duration={1200} />
+              <div className="x-label">
+                <GlitchText text="AI · QUANTUM · INTELLECT" duration={1400} />
+              </div>
             </div>
           </motion.div>
+          <div className="mb-3 font-mono text-[10.5px] tracking-[0.16em] text-green/50">BOOT SEQUENCE // LIVE SYSTEM STATUS</div>
           <ol className="space-y-2.5 font-mono text-[13px]">
             {lines.slice(0, shown).map((l) => (
-              <motion.li key={l.label} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+              <motion.li key={l.label} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 className="grid grid-cols-[18px_1fr] gap-x-2">
                 <span className={color[l.state]}>{glyph[l.state]}</span>
-                <span className="text-text">{l.label}</span>
+                <motion.span className="whitespace-nowrap text-text" initial={reducedMotion ? false : { clipPath: "inset(0 100% 0 0)" }}
+                  animate={{ clipPath: "inset(0 0% 0 0)" }} transition={{ duration: 0.32, ease: "linear" }}>
+                  {l.label}
+                </motion.span>
                 <span />
-                <span className="truncate text-[11.5px] text-muted" title={l.detail}>{l.detail}</span>
+                <span className="truncate text-[11.5px] text-green/45" title={l.detail}>&gt; {l.detail}</span>
               </motion.li>
             ))}
             {shown > lines.length && (
-              <motion.li initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pt-2 text-green x-cursor">
-                {failed ? "Entering with backend unavailable" : "System ready"}
+              <motion.li initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pt-2 tracking-[0.2em] x-phosphor x-cursor">
+                {failed ? "ENTERING WITH BACKEND UNAVAILABLE" : "SYSTEM READY"}
               </motion.li>
             )}
           </ol>
-          <div className="mt-10 flex items-center justify-between text-xs text-muted">
-            <span>● ready ○ not configured ▲ attention ◌ checking</span>
-            <button onClick={() => onDone(status)} className="rounded border border-line-strong px-2.5 py-1 text-dim hover:text-text">
-              Skip intro
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
+            <span className="font-mono text-[10.5px]">● ready ○ not configured ▲ attention ◌ checking</span>
+            <button onClick={() => onDone(status)} className="rounded-[3px] border border-green/30 px-2.5 py-1 font-mono text-[11px] tracking-[0.14em] text-green/80 hover:border-green hover:text-green">
+              SKIP INTRO
             </button>
           </div>
         </div>

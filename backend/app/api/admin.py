@@ -102,6 +102,13 @@ def audit_logs(category: str | None = None, outcome: str | None = None, q: str |
              "ip": a.ip} for a in db.scalars(stmt)]
 
 
+@router.get("/modes")
+def modes(_: User = Depends(require("scenarios.read"))):
+    """Catalogue of every execution mode: label, engines involved, requirements and description."""
+    from ..orchestration.planner import MODE_INFO, MODES
+    return [{"key": k, "label": MODES[k], **MODE_INFO[k]} for k in MODES]
+
+
 @router.get("/admin/settings/orchestration")
 def get_orchestration(db: Session = Depends(get_db), _: User = Depends(require("dashboard.read"))):
     return orchestration_settings(db)

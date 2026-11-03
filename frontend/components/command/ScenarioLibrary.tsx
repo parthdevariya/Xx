@@ -20,12 +20,18 @@ export function ScenarioLibrary({ scenarios, selected, onSelect, demoOnly }: {
     <div className="space-y-5">
       {Object.entries(groups).map(([cat, items]) => (
         <div key={cat}>
-          <div className="x-label mb-2">{cat}</div>
+          <div className="mb-2 flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] text-green/55">
+            <span aria-hidden className="h-px w-4 bg-green/40" />{cat.toUpperCase()}<span aria-hidden className="h-px flex-1 bg-green/10" />
+          </div>
           <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
             {items.map((s) => (
               <button key={s.slug} onClick={() => onSelect(s)} aria-pressed={selected === s.slug}
-                className={cx("group rounded-lg border p-3 text-left transition-colors",
-                  selected === s.slug ? "border-green/50 bg-green/[0.06]" : "border-line bg-white/[0.015] hover:border-line-strong")}>
+                className={cx("group relative rounded-[3px] border p-3 text-left transition-all",
+                  selected === s.slug
+                    ? "border-green/60 bg-green/[0.07] shadow-[0_0_22px_-8px_rgba(60,245,154,0.8),inset_0_0_18px_-10px_rgba(60,245,154,0.6)]"
+                    : "border-green/10 bg-black/40 hover:border-green/35 hover:shadow-[0_0_16px_-8px_rgba(60,245,154,0.7)]")}>
+                <span aria-hidden className={cx("absolute left-0 top-0 h-2.5 w-2.5 border-l border-t transition-colors",
+                  selected === s.slug ? "border-green" : "border-green/30 group-hover:border-green/70")} />
                 <div className="flex items-start justify-between gap-2">
                   <div className="font-display text-[14.5px] font-medium text-text">{s.name}</div>
                   {s.is_demo && <Badge tone="green">Demo</Badge>}

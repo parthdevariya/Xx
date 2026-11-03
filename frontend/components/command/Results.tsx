@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ProofView } from "./ProofView";
 import { Badge, ContentBadge, Empty, ExecBadge, JsonView, KV, Notice, Table, Tabs, Td, cx, fmtNum } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
-import type { BenchmarkMetric, Execution, Section } from "@/lib/types";
+import type { BenchmarkMetric, Execution, ProofResult, Section } from "@/lib/types";
 
-type Tab = "summary" | "solution" | "method" | "reasoning" | "calc" | "quantum" | "benchmark" | "raw";
+type Tab = "proof" | "summary" | "solution" | "method" | "reasoning" | "calc" | "quantum" | "benchmark" | "raw";
 
 function sec(ex: Execution, key: string): Section | null {
   const v = ex.final_output?.[key];
@@ -159,6 +160,11 @@ function BenchmarkView({ b }: { b: NonNullable<Execution["benchmark"]> }) {
 export function Results({ execution }: { execution: Execution | null }) {
   const [tab, setTab] = useState<Tab>("summary");
   const { can } = useAuth();
+  const proofResult = execution?.results?.find((r) => r.step === "proof")?.content as ProofResult | undefined;
+  const hasProof = !!proofResult?.criteria;
+  useEffect(() => {
+    if (hasProof) setTab("proof");
+  }, [hasProof, execution?.id]);
   if (!execution) return <Empty>Results appear here: executive summary, solution, methodology, reasoning trace, calculations, quantum contribution, benchmark and limitations.</Empty>;
   const done = execution.status === "completed";
   const results = execution.results ?? [];
@@ -168,6 +174,7 @@ export function Results({ execution }: { execution: Execution | null }) {
   const intellect = results.find((r) => r.step === "intellect");
   const detail = sec(execution, "detailed_solution");
   const tabs: { value: Tab; label: string }[] = [
+    ...(hasProof ? [{ value: "proof" as Tab, label: "Intellect vs AI" }] : []),
     { value: "summary", label: "Summary" }, { value: "solution", label: "Solution" }, { value: "method", label: "Methodology" },
     { value: "reasoning", label: "Reasoning" }, { value: "calc", label: "Calculations" }, { value: "quantum", label: "Quantum" },
     ...(execution.benchmark ? [{ value: "benchmark" as Tab, label: "Benchmark" }] : []), { value: "raw", label: "Raw" },
@@ -189,6 +196,7 @@ export function Results({ execution }: { execution: Execution | null }) {
       </div>
       {!done && tab !== "raw" && execution.status !== "failed" && <p className="text-sm text-muted">Execution {execution.status}. Sections fill in as steps complete.</p>}
 
+      {tab === "proof" && proofResult && <ProofView proof={proofResult} />}
       {tab === "summary" && (
         <div className="space-y-5">
           <SectionBlock title="Executive summary" s={sec(execution, "executive_summary")} />

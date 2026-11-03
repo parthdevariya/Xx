@@ -143,7 +143,8 @@ def create_scenario(body: ScenarioIn, request: Request, db: Session = Depends(ge
     db.add(s)
     db.flush()
     _new_version(db, s, body)
-    modes = list(EXECUTION_MODES) if body.solver_template else ["ai_only", "ai_intellect"]
+    modes = list(EXECUTION_MODES) if body.solver_template else ["ai_only", "ai_intellect", "intellect_vs_ai",
+                                                                  "benchmark"]
     db.add(ScenarioExecutionPolicy(scenario_id=s.id, allowed_modes=modes, default_mode=modes[-1]
                                    if "hybrid" not in modes else "hybrid"))
     audit(db, actor=user, category="scenario", action="scenario_created", target_type="scenario", target_id=s.id,
@@ -211,3 +212,112 @@ def versions(sid: str, db: Session = Depends(get_db), _: User = Depends(require(
     return [{"id": v.id, "version_no": v.version_no, "name": v.name, "created_at": v.created_at}
             for v in db.scalars(select(ScenarioVersion).where(ScenarioVersion.scenario_id == sid)
                                 .order_by(ScenarioVersion.version_no.desc()))]
+
+
+# ---------------------------------------------------------------- categories
+
+class CategoryIn(BaseModel):
+    slug: str = Field(max_length=80)
+    name: str = Field(min_length=1, max_length=160)
+    description: str = Field("", max_length=2000)
+    notice: str = Field("", max_length=1000)
+    position: int = 0
+
+
+@router.get("/scenario-categories/manage")
+def manage_categories(db: Session = Depends(get_db), _: User = Depends(require("scenarios.write"))):
+    counts = dict(db.execute(select(Scenario.category_id, func.count()).group_by(Scenario.category_id)).all())
+    return [{"id": c.id, "slug": c.slug, "name": c.name, "description": c.description, "notice": c.notice,
+             "position": c.position, "scenario_count": counts.get(c.id, 0)}
+            for c in db.scalars(select(ScenarioCategory).order_by(ScenarioCategory.position, ScenarioCategory.name))]
+
+
+@router.post("/scenario-categories")
+def create_category(body: CategoryIn, request: Request, db: Session = Depends(get_db),
+                    user: User = Depends(require("scenarios.write"))):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,79}", body.slug):
+        raise HTTPException(status_code=422, detail="Slug must be lowercase letters, digits and hyphens.")
+    if db.scalar(select(ScenarioCategory).where(ScenarioCategory.slug == body.slug)):
+        raise HTTPException(status_code=409, detail="A category with that slug exists.")
+    c = ScenarioCategory(**body.model_dump())
+    db.add(c)
+    audit(db, actor=user, category="scenario", action="category_created", target_type="scenario_category",
+          detail=body.model_dump(), request=request)
+    db.commit()
+    return {"id": c.id}
+
+
+@router.put("/scenario-categories/{cid}")
+def update_category(cid: str, body: CategoryIn, request: Request, db: Session = Depends(get_db),
+                    user: User = Depends(require("scenarios.write"))):
+    c = db.get(ScenarioCategory, cid)
+    if c is None:
+        raise HTTPException(status_code=404, detail="Category not found.")
+    if body.slug != c.slug and db.scalar(select(ScenarioCategory).where(ScenarioCategory.slug == body.slug)):
+        raise HTTPException(status_code=409, detail="A category with that slug exists.")
+    for k, v in body.model_dump().items():
+        setattr(c, k, v)
+    audit(db, actor=user, category="scenario", action="category_updated", target_type="scenario_category",
+          target_id=cid, detail=body.model_dump(), request=request)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/scenario-categories/{cid}")
+def delete_category(cid: str, request: Request, db: Session = Depends(get_db),
+                    user: User = Depends(require("scenarios.write"))):
+    c = db.get(ScenarioCategory, cid)
+    if c is None:
+        raise HTTPException(status_code=404, detail="Category not found.")
+    n = db.scalar(select(func.count()).select_from(Scenario).where(Scenario.category_id == cid))
+    if n:
+        raise HTTPException(status_code=409, detail=f"{n} scenario(s) use this category; move them first.")
+    audit(db, actor=user, category="scenario", action="category_deleted", target_type="scenario_category",
+          target_id=cid, detail={"slug": c.slug}, request=request)
+    db.delete(c)
+    db.commit()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- AI scenario generator
+
+@router.get("/scenarios/generator/models")
+def generator_models(db: Session = Depends(get_db), _: User = Depends(require("scenarios.write"))):
+    from ..ai import service as ai_svc
+    from ..ai.router import RouteRequest, rank
+    from ..models import AIModel
+    res = rank(list(db.scalars(select(AIModel))), RouteRequest(capability="", allow_test_provider=
+                                                               ai_svc.test_provider_allowed(db)), None)
+    return [{"id": c.model.id, "provider": c.provider.name, "model": c.model.model_id,
+             "label": f"{c.provider.name} · {c.model.display_name or c.model.model_id}",
+             "is_test": c.provider.kind == "deterministic_test"} for c in res.candidates]
+
+
+class GenerateIn(BaseModel):
+    brief: str = Field(min_length=10, max_length=4000)
+    category: str
+    kind: str = "reasoning"  # reasoning | computation
+    model_id: str | None = None
+
+
+@router.post("/scenarios/generate")
+def generate_scenario(body: GenerateIn, request: Request, db: Session = Depends(get_db),
+                      user: User = Depends(require("scenarios.write"))):
+    from ..ai import service as ai_svc
+    from ..scenarios.generator import generate
+    cat = db.scalar(select(ScenarioCategory).where(ScenarioCategory.slug == body.category))
+    if cat is None:
+        raise HTTPException(status_code=422, detail="Unknown category.")
+    if body.kind not in ("reasoning", "computation"):
+        raise HTTPException(status_code=422, detail="kind must be reasoning or computation")
+    try:
+        draft = generate(db, brief=body.brief, category=cat, kind=body.kind, model_id=body.model_id,
+                         user_id=user.id)
+    except ai_svc.AIUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"No AI model available to generate scenarios: {e}") from e
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    audit(db, actor=user, category="scenario", action="scenario_generated", target_type="scenario",
+          detail={"brief": body.brief[:300], "model": draft.get("_generated_by")}, request=request)
+    db.commit()
+    return draft

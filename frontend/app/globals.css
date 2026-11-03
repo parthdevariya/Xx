@@ -99,12 +99,84 @@ body {
   background-size: auto, auto, 48px 48px, 48px 48px;
 }
 
+/* HUD frame: thin glowing border, corner brackets, faint scanlines */
 .x-panel {
-  background: linear-gradient(180deg, rgba(18, 24, 25, 0.92), rgba(10, 14, 15, 0.92));
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 20px 40px -24px rgba(0, 0, 0, 0.8);
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(8, 18, 13, 0.86), rgba(4, 9, 7, 0.9));
+  border: 1px solid rgba(60, 245, 154, 0.14);
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    inset 0 0 40px -20px rgba(60, 245, 154, 0.18),
+    0 0 24px -16px rgba(60, 245, 154, 0.5);
+  backdrop-filter: blur(3px);
 }
+.x-panel::before,
+.x-panel::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  border-color: rgba(60, 245, 154, 0.75);
+  border-style: solid;
+}
+.x-panel::before { top: -1px; left: -1px; border-width: 1.5px 0 0 1.5px; }
+.x-panel::after { bottom: -1px; right: -1px; border-width: 0 1.5px 1.5px 0; }
+
+.x-scanlines {
+  position: relative;
+}
+/* on HUD panels ::after is the corner bracket, so scanlines go into the background stack */
+.x-panel.x-scanlines {
+  background:
+    repeating-linear-gradient(0deg, rgba(60, 245, 154, 0.03) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(8, 18, 13, 0.9), rgba(4, 9, 7, 0.94));
+}
+.x-scanlines:not(.x-panel)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(60, 245, 154, 0.025) 0 1px, transparent 1px 3px);
+  border-radius: inherit;
+}
+
+.x-hud-head {
+  background: linear-gradient(90deg, rgba(60, 245, 154, 0.09), rgba(60, 245, 154, 0.015) 60%, transparent);
+}
+
+.x-phosphor {
+  color: var(--green);
+  text-shadow: 0 0 6px rgba(60, 245, 154, 0.55), 0 0 18px rgba(60, 245, 154, 0.2);
+}
+
+@keyframes x-flash {
+  0% { background: rgba(60, 245, 154, 0.16); }
+  100% { background: transparent; }
+}
+.x-flash { animation: x-flash 1.2s ease-out; }
+
+@keyframes x-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.x-sweep::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 25%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(60, 245, 154, 0.08), transparent);
+  animation: x-sweep 7s linear infinite;
+}
+
+@keyframes x-pulse-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.x-pulse { animation: x-pulse-glow 2.2s ease-in-out infinite; }
 
 .x-label {
   font-family: var(--font-mono);
@@ -112,6 +184,17 @@ body {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.x-rain-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.x-above-rain {
+  position: relative;
+  z-index: 1;
 }
 
 .x-glow-text {

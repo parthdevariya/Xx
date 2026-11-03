@@ -16,8 +16,11 @@ export function Panel({ title, actions, children, className, bodyClass, label }:
   return (
     <section className={cx("x-panel flex min-w-0 flex-col", className)} aria-label={label ?? (typeof title === "string" ? title : undefined)}>
       {(title || actions) && (
-        <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
-          <h2 className="x-label !text-dim">{title}</h2>
+        <header className="x-hud-head flex items-center justify-between gap-3 border-b border-green/15 px-4 py-2.5">
+          <h2 className="x-label flex items-center gap-2 !text-green/90">
+            <span aria-hidden className="inline-block h-1.5 w-1.5 rotate-45 bg-green shadow-[0_0_6px_var(--green)]" />
+            {title}
+          </h2>
           <div className="flex items-center gap-2">{actions}</div>
         </header>
       )}
@@ -47,11 +50,11 @@ type BtnProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 export function Button({ variant = "subtle", size = "md", loading, className, children, disabled, ...rest }: BtnProps) {
-  const base = "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40";
+  const base = "inline-flex items-center justify-center gap-2 rounded-[3px] font-medium tracking-wide transition-all disabled:cursor-not-allowed disabled:opacity-40";
   const sizes = { sm: "h-7 px-2.5 text-xs", md: "h-9 px-3.5 text-sm" };
   const variants = {
-    primary: "bg-green text-black hover:bg-[#6dffb8] shadow-[0_0_24px_-6px_rgba(60,245,154,0.6)]",
-    subtle: "border border-line-strong bg-raised text-text hover:border-green/40 hover:text-white",
+    primary: "bg-green text-black uppercase font-mono text-[12.5px] tracking-[0.14em] hover:bg-[#6dffb8] shadow-[0_0_24px_-4px_rgba(60,245,154,0.7)] hover:shadow-[0_0_32px_-2px_rgba(60,245,154,0.85)]",
+    subtle: "border border-green/20 bg-black/40 text-text hover:border-green/55 hover:text-white hover:shadow-[0_0_14px_-6px_rgba(60,245,154,0.8)]",
     ghost: "text-dim hover:bg-white/5 hover:text-text",
     danger: "border border-red/40 bg-red/10 text-red hover:bg-red/20",
   };
@@ -76,7 +79,7 @@ export function Field({ label, hint, error, children, className }: {
   );
 }
 
-const inputCls = "w-full rounded-md border border-line-strong bg-bg-2 px-3 py-2 text-sm text-text placeholder:text-muted focus:border-green/50 focus:outline-none";
+const inputCls = "w-full rounded-[3px] border border-green/15 bg-black/50 px-3 py-2 text-sm text-text placeholder:text-muted focus:border-green/60 focus:shadow-[0_0_12px_-4px_rgba(60,245,154,0.6)] focus:outline-none";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cx(inputCls, "h-9", props.className)} />;
@@ -123,7 +126,7 @@ export function Tabs<T extends string>({ tabs, value, onChange }: {
       {tabs.map((t) => (
         <button key={t.value} role="tab" aria-selected={value === t.value} onClick={() => onChange(t.value)}
           className={cx("-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
-            value === t.value ? "border-green text-text" : "border-transparent text-muted hover:text-dim")}>
+            value === t.value ? "border-green text-green [text-shadow:0_0_8px_rgba(60,245,154,0.5)]" : "border-transparent text-muted hover:text-dim")}>
           {t.label}
         </button>
       ))}

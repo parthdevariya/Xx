@@ -33,8 +33,14 @@ def db(engine):
 
 @pytest.fixture()
 def seeded(db):
+    from sqlalchemy import update
+
+    from app.models import Scenario
+    from app.scenarios.seed import SCENARIOS
     from app.seed import seed_all
     seed_all(db)
+    # The original scenarios are retired by library v2; tests still use them as stable numeric fixtures.
+    db.execute(update(Scenario).where(Scenario.slug.in_([s["slug"] for s in SCENARIOS])).values(status="published"))
     db.commit()
     return db
 

@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { Button, ErrorNote, Field, Input } from "@/components/ui";
+import { GlitchText } from "@/components/fx/GlitchText";
+import { MatrixRain } from "@/components/fx/MatrixRain";
 import { XMark } from "@/components/XMark";
 import { useAuth } from "@/lib/auth";
 
@@ -30,13 +32,16 @@ function LoginForm() {
   }
 
   return (
-    <form onSubmit={submit} className="x-panel w-full max-w-sm space-y-4 p-6">
+    <form onSubmit={submit} className="x-panel x-scanlines x-above-rain w-full max-w-sm space-y-4 p-6">
       <div className="mb-2 flex items-center gap-3">
-        <XMark size={34} />
+        <XMark size={38} />
         <div>
-          <div className="font-display text-lg font-semibold tracking-[0.3em]">X</div>
-          <div className="x-label">Computational intelligence</div>
+          <GlitchText text="X" className="font-display text-xl font-semibold tracking-[0.4em] x-phosphor" />
+          <div className="x-label">Operator authentication</div>
         </div>
+      </div>
+      <div className="border-y border-green/10 py-1.5 font-mono text-[10.5px] tracking-[0.14em] text-green/50">
+        SECURE CHANNEL // AI · QUANTUM · INTELLECT
       </div>
       <Field label="Email">
         <Input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -45,7 +50,7 @@ function LoginForm() {
         <Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
       </Field>
       <ErrorNote error={error} />
-      <Button type="submit" variant="primary" className="w-full" loading={busy}>Enter X</Button>
+      <Button type="submit" variant="primary" className="w-full" loading={busy}>Authenticate</Button>
       <p className="text-xs text-muted">Accounts are created by an administrator.</p>
     </form>
   );
@@ -53,7 +58,9 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main id="main" className="x-grid x-vignette flex min-h-dvh items-center justify-center px-4">
+    <main id="main" className="x-grid x-vignette relative flex min-h-dvh items-center justify-center overflow-hidden px-4">
+      <MatrixRain opacity={0.28} />
+      <div aria-hidden className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_center,transparent_15%,#050708_80%)]" />
       <Suspense>
         <LoginForm />
       </Suspense>

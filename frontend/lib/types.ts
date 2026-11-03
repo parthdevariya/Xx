@@ -40,6 +40,7 @@ export type Scenario = {
   context?: string;
   demonstrates?: string;
   visualizations?: string[];
+  benchmark_config?: { approaches?: string[]; rubric?: RubricCriterion[] } & Record<string, unknown>;
   fields?: ScenarioField[];
   defaults?: Record<string, unknown>;
   policy?: {
@@ -139,8 +140,39 @@ export type SystemStatus = {
 export const MODE_LABELS: Record<string, string> = {
   ai_only: "AI Only",
   ai_intellect: "AI + Intellect",
+  intellect_vs_ai: "Intellect vs AI (judged proof)",
   classical: "Classical",
+  quantum: "Quantum Only",
+  classical_quantum: "Classical vs Quantum",
+  ai_classical: "AI + Classical",
+  classical_intellect: "Classical + Intellect",
   ai_quantum: "AI + Quantum",
   hybrid: "Full Hybrid X",
   benchmark: "Comparative Benchmark",
+};
+
+export type ModeInfo = { key: string; label: string; engines: string[]; needs: string[]; description: string };
+
+export type RubricCriterion = {
+  id: string; criterion: string; why?: string; related_rules: string[];
+  check: { type: "judge" | "max_questions" | "must_not_contain" | "must_contain_any"; value?: number | string[] };
+};
+
+export type ProofVerdict = { pass: boolean | null; evidence: string; reason: string };
+
+export type ProofResult = {
+  verdict: string;
+  score: { ai_only: number; ai_intellect: number };
+  total: number;
+  criteria: {
+    id: string; criterion: string; why: string; related_rules: string[]; rules_applied_by_intellect: string[];
+    method: "judge" | "deterministic"; ai_only: ProofVerdict; ai_intellect: ProofVerdict;
+  }[];
+  intellect_only_wins: string[];
+  ai_only_wins: string[];
+  rules_behind_wins: string[];
+  judge: { model: string; blind: boolean; order: Record<string, string>; error: string; test_provider: boolean };
+  rubric_source: string;
+  answers: { ai_only: string; ai_intellect: string };
+  method_note: string;
 };

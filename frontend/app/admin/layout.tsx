@@ -5,6 +5,9 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { RequireAuth } from "@/components/RequireAuth";
 import { cx } from "@/components/ui";
+import { GlitchText } from "@/components/fx/GlitchText";
+import { MatrixRain } from "@/components/fx/MatrixRain";
+import { Clock, TelemetryStrip } from "@/components/fx/Telemetry";
 import { Wordmark } from "@/components/XMark";
 import { useAuth } from "@/lib/auth";
 
@@ -49,14 +52,16 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
   const path = usePathname();
   const { can } = useAuth();
   return (
-    <nav aria-label="Administration" className="space-y-5">
-      {NAV.map((g) => {
+    <nav aria-label="Administration" className="space-y-5 font-mono">
+      {NAV.map((g, gi) => {
         const items = g.items.filter((i) => can(i.perm));
         if (!items.length) return null;
         return (
           <div key={g.group}>
-            <div className="x-label mb-1.5 px-2">{g.group}</div>
-            <ul className="space-y-0.5">
+            <div className="mb-1.5 px-2 text-[10px] tracking-[0.22em] text-green/45">
+              {String(gi).padStart(2, "0")} {"//"} {g.group.toUpperCase()}
+            </div>
+            <ul className="space-y-0.5 border-l border-green/10 pl-1">
               {items.map((i) => {
                 // Longest matching href wins, so /admin/intellect doesn't stay lit on its sub-pages.
                 const longer = ALL_HREFS.some((h) => h.length > i.href.length && (path === h || path.startsWith(h + "/")));
@@ -64,9 +69,12 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
                   : (path === i.href || path.startsWith(i.href + "/")) && !longer;
                 return (
                   <li key={i.href}>
-                    <Link href={i.href} onClick={onNavigate}
-                      className={cx("block rounded-md px-2 py-1.5 text-sm transition-colors",
-                        active ? "bg-green/10 text-green" : "text-dim hover:bg-white/5 hover:text-text")}>
+                    <Link href={i.href} onClick={onNavigate} aria-current={active ? "page" : undefined}
+                      className={cx("group flex items-center gap-2 rounded-[3px] px-2 py-1.5 text-[12.5px] transition-colors",
+                        active ? "bg-green/10 text-green [text-shadow:0_0_8px_rgba(60,245,154,0.45)]" : "text-dim hover:bg-green/[0.04] hover:text-text")}>
+                      <span aria-hidden className={cx("text-[10px]", active ? "text-green" : "text-green/25 group-hover:text-green/60")}>
+                        {active ? "▸" : "›"}
+                      </span>
                       {i.label}
                     </Link>
                   </li>
@@ -85,25 +93,39 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [open, setOpen] = useState(false);
   return (
     <RequireAuth permission="dashboard.read">
-      <div className="min-h-dvh bg-bg">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-bg/90 px-4 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <button className="rounded p-1 text-dim lg:hidden" onClick={() => setOpen(!open)} aria-label="Toggle navigation">☰</button>
-            <Link href="/" aria-label="Command centre"><Wordmark /></Link>
-            <span className="x-label hidden sm:inline">Administration</span>
+      <div className="x-grid x-vignette min-h-dvh">
+        <MatrixRain opacity={0.07} density={0.6} />
+        <div className="x-above-rain">
+          <header className="sticky top-0 z-30 border-b border-green/15 bg-bg/90 backdrop-blur">
+            <div className="flex h-14 items-center justify-between gap-3 px-4">
+              <div className="flex items-center gap-3">
+                <button className="rounded p-1 text-green/70 lg:hidden" onClick={() => setOpen(!open)} aria-label="Toggle navigation" aria-expanded={open}>☰</button>
+                <Link href="/" aria-label="Command centre"><Wordmark /></Link>
+                <span className="hidden border-l border-green/20 pl-3 font-mono text-[11px] tracking-[0.3em] sm:inline x-phosphor">
+                  <GlitchText text="MASTER CONTROL" />
+                </span>
+              </div>
+              <div className="flex items-center gap-4 text-sm">
+                <Clock />
+                <span className="hidden font-mono text-[11px] text-muted md:inline">
+                  OPERATOR <span className="text-dim">{user?.email}</span> <span className="text-green/60">[{user?.role_name}]</span>
+                </span>
+                <Link href="/" className="font-mono text-[11px] tracking-[0.12em] text-dim hover:text-green">COMMAND CENTRE →</Link>
+                <button onClick={logout} className="font-mono text-[11px] tracking-[0.12em] text-muted hover:text-text">SIGN OUT</button>
+              </div>
+            </div>
+            <TelemetryStrip />
+          </header>
+          <div className="flex">
+            <aside className={cx("fixed inset-y-[6.4rem] left-0 z-20 w-60 overflow-y-auto border-r border-green/10 bg-bg/95 p-3 transition-transform lg:sticky lg:top-[6.4rem] lg:h-[calc(100dvh-6.4rem)] lg:translate-x-0",
+              open ? "translate-x-0" : "-translate-x-full")}>
+              <Nav onNavigate={() => setOpen(false)} />
+              <div className="mt-6 border-t border-green/10 px-2 pt-3 font-mono text-[9.5px] leading-relaxed tracking-[0.14em] text-green/35">
+                X // HYBRID COMPUTATIONAL INTELLIGENCE<br />AI · QUANTUM · INTELLECT
+              </div>
+            </aside>
+            <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-8">{children}</main>
           </div>
-          <div className="flex items-center gap-3 text-sm">
-            <Link href="/" className="text-dim hover:text-green">Command centre →</Link>
-            <span className="hidden text-muted md:inline">{user?.email} · {user?.role_name}</span>
-            <button onClick={logout} className="text-muted hover:text-text">Sign out</button>
-          </div>
-        </header>
-        <div className="flex">
-          <aside className={cx("fixed inset-y-14 left-0 z-20 w-60 overflow-y-auto border-r border-line bg-bg p-3 transition-transform lg:sticky lg:top-14 lg:h-[calc(100dvh-3.5rem)] lg:translate-x-0",
-            open ? "translate-x-0" : "-translate-x-full")}>
-            <Nav onNavigate={() => setOpen(false)} />
-          </aside>
-          <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-8">{children}</main>
         </div>
       </div>
     </RequireAuth>
