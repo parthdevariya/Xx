@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, ErrorNote, Field, Input, Notice, Select, Textarea, Toggle } from "@/components/ui";
 import { api } from "@/lib/api";
-import { MODE_LABELS, type Execution, type Scenario, type ScenarioField } from "@/lib/types";
+import { MODE_LABELS, type Execution, type ModeInfo, type Scenario, type ScenarioField } from "@/lib/types";
 
 const ALL_MODES = Object.keys(MODE_LABELS);
 
@@ -54,6 +54,10 @@ export function ProblemConsole({ scenario, onClearScenario, onSubmitted, canWrit
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [modeInfo, setModeInfo] = useState<Record<string, ModeInfo>>({});
+  useEffect(() => {
+    api.get<ModeInfo[]>("/modes").then((ms) => setModeInfo(Object.fromEntries(ms.map((m) => [m.key, m])))).catch(() => setModeInfo({}));
+  }, []);
 
   const modes = scenario ? scenario.modes : ALL_MODES;
   const fields = useMemo(() => scenario?.fields ?? [], [scenario]);
@@ -155,8 +159,12 @@ export function ProblemConsole({ scenario, onClearScenario, onSubmitted, canWrit
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Execution mode">
-          <Select value={mode} onChange={(e) => setMode(e.target.value)}
-            options={ALL_MODES.map((m) => ({ value: m, label: MODE_LABELS[m], disabled: !modes.includes(m) }))} />
+          <Select value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Execution mode"
+            menuWidth={420}
+            options={ALL_MODES.map((m) => ({
+              value: m, label: MODE_LABELS[m], disabled: !modes.includes(m), description: modeInfo[m]?.description,
+              tag: modeInfo[m]?.engines.map((e) => ({ ai: "AI", intellect: "IN", classical: "CL", quantum: "QU" } as Record<string, string>)[e]).join("·"),
+            }))} />
         </Field>
         <Field label="Supporting files" hint="PDF, DOCX, TXT, CSV, JSON · up to 3 · 10 MB each">
           <input ref={fileRef} type="file" multiple accept=".pdf,.docx,.txt,.csv,.json" className="sr-only" id="x-files"

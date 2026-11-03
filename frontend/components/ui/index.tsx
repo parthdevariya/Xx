@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ContentClass, ExecClass } from "@/lib/types";
 
 export function cx(...c: (string | false | null | undefined)[]) {
@@ -89,15 +90,137 @@ export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
   return <textarea {...props} className={cx(inputCls, "min-h-24 resize-y leading-relaxed", props.className)} />;
 }
 
-export function Select({ options, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & {
-  options: { value: string; label: string; disabled?: boolean }[];
+export type SelectOption = { value: string; label: string; disabled?: boolean; description?: string; tag?: string };
+
+/** Matrix-styled listbox with the same API as a native <select> (onChange receives { target: { value } }). */
+export function Select({ options, value, onChange, disabled, className, id, "aria-label": ariaLabel, placeholder, menuWidth }: {
+  options: SelectOption[];
+  value?: string | number | readonly string[];
+  onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  disabled?: boolean; className?: string; id?: string; "aria-label"?: string; placeholder?: string; menuWidth?: number;
 }) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const root = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; width: number; maxH: number; up: boolean } | null>(null);
+  const typed = useRef({ s: "", t: 0 });
+  const listId = useRef(`xsel-${Math.random().toString(36).slice(2, 9)}`).current;
+  const current = options.find((o) => o.value === String(value ?? ""));
+
+  const choose = (o: SelectOption | undefined) => {
+    if (!o || o.disabled) return;
+    onChange?.({ target: { value: o.value }, currentTarget: { value: o.value } } as unknown as React.ChangeEvent<HTMLSelectElement>);
+    setOpen(false);
+  };
+  const move = (from: number, dir: 1 | -1) => {
+    for (let i = 1; i <= options.length; i++) {
+      const k = (from + dir * i + options.length) % options.length;
+      if (!options[k].disabled) return k;
+    }
+    return from;
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    setActive(Math.max(0, options.findIndex((o) => o.value === String(value ?? ""))));
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!root.current?.contains(t) && !list.current?.contains(t)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open, options, value]);
+
+  // The menu renders in a portal (panels create stacking contexts), positioned against the button.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = btn.current?.getBoundingClientRect();
+      if (!r) return;
+      const width = Math.min(Math.max(r.width, menuWidth ?? 220), window.innerWidth - 16);
+      const left = Math.min(Math.max(8, r.left), window.innerWidth - width - 8);
+      const below = window.innerHeight - r.bottom - 12, above = r.top - 12;
+      const up = below < 240 && above > below;
+      setPos({ left, width, up, top: up ? r.top - 4 : r.bottom + 4, maxH: Math.min(360, up ? above : below) });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }, [open, menuWidth]);
+
+  useEffect(() => {
+    if (open) list.current?.querySelector<HTMLElement>(`[data-idx="${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [active, open]);
+
+  function onKey(e: React.KeyboardEvent) {
+    if (disabled) return;
+    if (!open && ["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) { e.preventDefault(); setOpen(true); return; }
+    if (!open) return;
+    if (e.key === "Escape") { e.stopPropagation(); setOpen(false); return; }
+    if (e.key === "Tab") { setOpen(false); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => move(a, 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => move(a, -1)); }
+    else if (e.key === "Home") { e.preventDefault(); setActive(move(-1, 1)); }
+    else if (e.key === "End") { e.preventDefault(); setActive(move(options.length, -1)); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(options[active]); }
+    else if (e.key.length === 1) {
+      const now = Date.now();
+      typed.current = { s: (now - typed.current.t < 600 ? typed.current.s : "") + e.key.toLowerCase(), t: now };
+      const k = options.findIndex((o) => !o.disabled && o.label.toLowerCase().startsWith(typed.current.s));
+      if (k >= 0) setActive(k);
+    }
+  }
+
   return (
-    <select {...props} className={cx(inputCls, "h-9", props.className)}>
-      {options.map((o) => (
-        <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>
-      ))}
-    </select>
+    <div ref={root} className={cx("relative", className?.includes("w-") ? "" : "w-full")}>
+      <button ref={btn} type="button" id={id} disabled={disabled} onClick={() => setOpen((o) => !o)} onKeyDown={onKey}
+        role="combobox" aria-haspopup="listbox" aria-expanded={open} aria-controls={listId} aria-label={ariaLabel}
+        aria-activedescendant={open ? `${listId}-${active}` : undefined}
+        className={cx(inputCls, "group flex h-9 items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-50",
+          open && "border-green/70 shadow-[0_0_16px_-4px_rgba(60,245,154,0.7)]", className)}>
+        <span className="flex min-w-0 items-center gap-2">
+          <span aria-hidden className={cx("h-1.5 w-1.5 shrink-0 rotate-45", current ? "bg-green shadow-[0_0_6px_rgba(60,245,154,0.9)]" : "bg-muted")} />
+          <span className={cx("truncate", !current && "text-muted")}>{current?.label ?? placeholder ?? "Select…"}</span>
+        </span>
+        <span aria-hidden className={cx("font-mono text-[10px] text-green/70 transition-transform", open && "rotate-180")}>▼</span>
+      </button>
+      {open && pos && createPortal(
+        <ul ref={list} id={listId} role="listbox" aria-label={ariaLabel} className="fixed z-[70] overflow-y-auto"
+          style={{ left: pos.left, width: pos.width, maxHeight: pos.maxH,
+            ...(pos.up ? { bottom: window.innerHeight - pos.top } : { top: pos.top }), background: "rgba(3,8,6,0.96)", border: "1px solid rgba(60,245,154,0.4)", borderRadius: 3, padding: 4,
+            boxShadow: "0 0 30px -8px rgba(60,245,154,0.7), 0 20px 40px -10px rgba(0,0,0,0.9)", backdropFilter: "blur(8px)" }}>
+          <li aria-hidden className="mb-1 flex items-center justify-between border-b border-green/15 px-2 pb-1 pt-0.5 font-mono text-[9px] tracking-[0.25em] text-green/50">
+            <span>SELECT {"//"} {options.filter((o) => !o.disabled).length} AVAILABLE</span><span>↑↓ ⏎</span>
+          </li>
+          {options.map((o, i) => {
+            const selected = o.value === String(value ?? "");
+            return (
+              <li key={o.value} id={`${listId}-${i}`} data-idx={i} role="option" aria-selected={selected} aria-disabled={o.disabled}
+                onMouseEnter={() => !o.disabled && setActive(i)} onMouseDown={(e) => { e.preventDefault(); choose(o); }}
+                className={cx("relative flex cursor-pointer items-start gap-2 rounded-[2px] px-2 py-1.5 text-sm transition-colors",
+                  o.disabled ? "cursor-not-allowed opacity-35" : i === active ? "bg-green/[0.12] text-white" : "text-dim",
+                  selected && "text-green")}>
+                <span aria-hidden className={cx("mt-[3px] w-3 shrink-0 font-mono text-[10px]", i === active && !o.disabled ? "text-green" : "text-transparent")}>▸</span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className={cx("truncate", i === active && !o.disabled && "x-phosphor")}>{o.label}</span>
+                    {o.tag && <span className="shrink-0 rounded-[2px] border border-cyan/40 px-1 font-mono text-[9px] tracking-wider text-cyan">{o.tag}</span>}
+                  </span>
+                  {o.description && <span className="mt-0.5 block text-[11px] leading-snug text-muted">{o.description}</span>}
+                  {o.disabled && <span className="mt-0.5 block font-mono text-[9.5px] tracking-wider text-muted">UNAVAILABLE</span>}
+                </span>
+                {selected && <span aria-hidden className="mt-[3px] font-mono text-[10px] text-green">◆</span>}
+                {i === active && !o.disabled && <span aria-hidden className="absolute inset-y-1 left-0 w-[2px] bg-green shadow-[0_0_8px_rgba(60,245,154,0.9)]" />}
+              </li>
+            );
+          })}
+        </ul>,
+        document.body,
+      )}
+    </div>
   );
 }
 
