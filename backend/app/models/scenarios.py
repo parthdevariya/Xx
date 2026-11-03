@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base, IdMixin, TimestampMixin
 
 EXECUTION_MODES = ("ai_only", "ai_intellect", "intellect_vs_ai", "classical", "quantum", "classical_quantum",
-                   "ai_classical", "classical_intellect", "ai_quantum", "hybrid", "benchmark", "matrix")
+                   "ai_classical", "classical_intellect", "ai_quantum", "hybrid", "benchmark", "matrix", "swarm")
 
 
 class ScenarioCategory(IdMixin, TimestampMixin, Base):

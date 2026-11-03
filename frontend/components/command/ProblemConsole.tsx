@@ -51,6 +51,7 @@ export function ProblemConsole({ scenario, onClearScenario, onSubmitted, canWrit
   const [allowHardware, setAllowHardware] = useState(false);
   const [maxCost, setMaxCost] = useState("0");
   const [autoRun, setAutoRun] = useState(true);
+  const [swarmVar, setSwarmVar] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -98,7 +99,7 @@ export function ProblemConsole({ scenario, onClearScenario, onSubmitted, canWrit
     setError(null);
     const payload = {
       text, mode: overrideMode ?? mode, inputs: scenario ? parsed.out : {}, scenario_slug: scenario?.slug ?? null,
-      allow_hardware: allowHardware, max_cost_usd: Number(maxCost) || 0, auto_run: autoRun,
+      allow_hardware: allowHardware, max_cost_usd: Number(maxCost) || 0, auto_run: autoRun, swarm_variable: swarmVar,
     };
     try {
       let ex: Execution;
@@ -189,6 +190,9 @@ export function ProblemConsole({ scenario, onClearScenario, onSubmitted, canWrit
           <Toggle checked={allowHardware} onChange={setAllowHardware} label="Allow real quantum hardware (if configured and permitted by policy)" />
           <Field label="Maximum spend for this run (USD)" hint="Capped by the orchestration policy. 0 = free routes only.">
             <Input type="number" min={0} step="0.01" value={maxCost} onChange={(e) => setMaxCost(e.target.value)} />
+          </Field>
+          <Field label="Swarm God's-eye variable (optional)" hint="Injected into the Swarm Intelligence simulation from the middle round, when Swarm runs.">
+            <Input value={swarmVar} maxLength={2000} onChange={(e) => setSwarmVar(e.target.value)} placeholder="e.g. A respected auditor publishes the real accounts" />
           </Field>
           <Toggle checked={autoRun} onChange={setAutoRun} label="Start immediately when the plan has no cost (otherwise review the plan first)" />
         </div>

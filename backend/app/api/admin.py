@@ -3,13 +3,14 @@ from __future__ import annotations
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..engine_switches import get_switches
 from ..deps import current_user, require
-from ..models import (AIExecutionLog, AIProvider, AuditLog, BackgroundJob, CostRecord, Execution,
+from ..models import (AIExecutionLog, AIModel, AIProvider, AuditLog, BackgroundJob, CostRecord, Execution,
                       IntellectFramework, IntellectRule, IntellectVersion, QuantumJob, QuantumProvider, Scenario,
                       SystemSetting, User, utcnow)
 from ..services.audit import audit
@@ -128,6 +129,110 @@ def put_engine_switches(body: dict, request: Request, db: Session = Depends(get_
     audit(db, actor=user, category="config", action="engine_switches_changed", detail=changed, request=request)
     db.commit()
     return after
+
+
+class ZepIn(BaseModel):
+    enabled: bool | None = None
+    base_url: str | None = Field(None, max_length=300)
+    api_key: str | None = Field(None, max_length=500)
+
+
+def _swarm_overview(db: Session) -> dict:
+    from ..ai import service as ai_svc
+    from ..ai.router import RouteRequest, rank
+    from ..engine_switches import ACTIONS, STAGES
+    from ..integrations import zep
+    sw = get_switches(db)
+    cfg = sw["swarm_config"]
+    ranked = rank(list(db.scalars(select(AIModel))), RouteRequest(capability="", allow_test_provider=
+                                                                  ai_svc.test_provider_allowed(db)), None)
+    models = [{"id": c.model.id, "label": f"{c.provider.name} · {c.model.display_name or c.model.model_id}",
+               "provider": c.provider.name, "model": c.model.model_id, "is_test": c.provider.kind == "deterministic_test",
+               "input_cost_per_mtok": c.model.input_cost_per_mtok, "output_cost_per_mtok": c.model.output_cost_per_mtok}
+              for c in ranked.candidates]
+    real = [m for m in models if not m["is_test"]]
+    calls = 3 + cfg["rounds"] * sum(1 for v in cfg["platforms"].values() if v)
+    zs = zep.settings(db)
+    ready = sw["ai"] and sw["intellect"] and bool(models)
+    return {
+        "switches": {k: sw[k] for k in ("ai", "intellect", "swarm")},
+        "config": cfg, "actions": ACTIONS, "stages": list(STAGES),
+        "models": models,
+        "estimate": {"model_calls_per_run": calls, "plus_chat": "1 call per Deep Interaction message"},
+        "integrations": {
+            "llm": {"name": "LLM provider (via the X AI engine)", "required": True,
+                    "status": "ready" if real else "test_only" if models else ("off" if not sw["ai"] else "missing"),
+                    "detail": (f"{len(real)} usable model(s): " + ", ".join(m["label"] for m in real[:4])) if real else
+                              ("Only the deterministic test provider is active — not a real model." if models else
+                               "AI engine switched OFF." if not sw["ai"] else
+                               "Configure Anthropic, OpenAI or any OpenAI-compatible provider in AI Management."),
+                    "used_for": "graph building, persona generation, every simulation round, the ReportAgent and chat"},
+            "zep": {"name": "Zep Cloud graph memory", "required": False, **zs,
+                    "used_for": "optional long-term graph memory: seed, extracted graph and each round are stored as "
+                                "episodes; the ReportAgent and agent chat retrieve facts by semantic search",
+                    "docs": "https://help.getzep.com/"},
+        },
+        "ready": ready,
+        "readiness": [
+            {"item": "AI engine switched on", "ok": sw["ai"]},
+            {"item": "Intellect engine switched on", "ok": sw["intellect"]},
+            {"item": "At least one usable AI model", "ok": bool(models), "note": "test provider only" if models and not real else ""},
+            {"item": "Swarm Intelligence switched on (needed to run with Intellect; Swarm mode also needs it)", "ok": sw["swarm"]},
+            {"item": "Zep memory (optional)", "ok": zs["status"] == "healthy" and zs["enabled"],
+             "note": "using internal memory" if cfg["memory_backend"] == "internal" else zs["status"]},
+        ],
+    }
+
+
+@router.get("/admin/swarm")
+def swarm_overview(db: Session = Depends(get_db), _: User = Depends(require("dashboard.read"))):
+    return _swarm_overview(db)
+
+
+@router.put("/admin/swarm/config")
+def swarm_config(body: dict, request: Request, db: Session = Depends(get_db),
+                 user: User = Depends(require("policies.write"))):
+    from ..engine_switches import set_switches
+    before = get_switches(db)["swarm_config"]
+    try:
+        after = set_switches(db, {"swarm_config": body}, user.id)["swarm_config"]
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    audit(db, actor=user, category="config", action="swarm_config_changed",
+          detail={k: {"from": before.get(k), "to": after[k]} for k in after if before.get(k) != after[k]}, request=request)
+    db.commit()
+    return _swarm_overview(db)
+
+
+@router.put("/admin/integrations/zep")
+def zep_save(body: ZepIn, request: Request, db: Session = Depends(get_db), user: User = Depends(require("policies.write"))):
+    from ..integrations import zep
+    try:
+        zep.save(db, enabled=body.enabled, base_url=body.base_url, api_key=body.api_key, user_id=user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    audit(db, actor=user, category="provider", action="zep_integration_saved",
+          detail={"enabled": body.enabled, "base_url": body.base_url, "key_changed": bool(body.api_key)}, request=request)
+    db.commit()
+    return _swarm_overview(db)
+
+
+@router.post("/admin/integrations/zep/health")
+def zep_health(request: Request, db: Session = Depends(get_db), user: User = Depends(require("policies.write"))):
+    from ..integrations import zep
+    r = zep.health_check(db)
+    audit(db, actor=user, category="provider", action="zep_health_check", detail={"status": r["status"]}, request=request)
+    db.commit()
+    return _swarm_overview(db)
+
+
+@router.delete("/admin/integrations/zep/credential")
+def zep_clear(request: Request, db: Session = Depends(get_db), user: User = Depends(require("policies.write"))):
+    from ..integrations import zep
+    zep.save(db, clear_key=True, user_id=user.id)
+    audit(db, actor=user, category="provider", action="zep_credential_deleted", request=request)
+    db.commit()
+    return _swarm_overview(db)
 
 
 @router.get("/modes")

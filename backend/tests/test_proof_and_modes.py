@@ -50,7 +50,7 @@ def test_library_v2_retires_original_scenarios_once(db):
 def test_mode_catalogue_complete(api):
     api.login("user@example.com")
     cat = api.get("/api/modes").json()
-    assert [m["key"] for m in cat] == list(MODES) and len(cat) == 12
+    assert [m["key"] for m in cat] == list(MODES) and len(cat) == 13
     assert set(MODE_INFO) == set(MODES)
 
 

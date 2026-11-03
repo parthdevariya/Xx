@@ -324,4 +324,10 @@ def seed_proof_scenarios(db: Session) -> None:
             if "matrix" not in (pol.allowed_modes or []):
                 pol.allowed_modes = [*pol.allowed_modes, "matrix"]
         flag.value = {"version": 3}
+    # Library v4: enable the Swarm Intelligence mode on every scenario once.
+    if (flag.value or {}).get("version", 1) < 4:
+        for pol in db.scalars(select(ScenarioExecutionPolicy)):
+            if "swarm" not in (pol.allowed_modes or []):
+                pol.allowed_modes = [*pol.allowed_modes, "swarm"]
+        flag.value = {"version": 4}
     db.flush()

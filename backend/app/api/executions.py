@@ -46,6 +46,7 @@ class SubmitIn(BaseModel):
     allow_hardware: bool = False
     max_cost_usd: float | None = Field(None, ge=0)
     layer_switches: dict = {}
+    swarm_variable: str = Field("", max_length=2000)
     auto_run: bool = True
 
 
@@ -137,7 +138,8 @@ def _submit(db: Session, request: Request, user: User, body: SubmitIn, attachmen
         ex = executor.create_execution(db, user_id=user.id, text=body.text, inputs=body.inputs, scenario=scenario,
                                        mode=body.mode, attachments=attachments, attachments_text=att_text,
                                        allow_hardware=allow_hw, max_cost_usd=max_cost,
-                                       layer_switches=body.layer_switches, is_demo=is_demo)
+                                       layer_switches=body.layer_switches, is_demo=is_demo,
+                                       swarm_variable=body.swarm_variable)
     except InputValidationError as e:
         raise HTTPException(status_code=422, detail={"message": "Invalid inputs", "errors": e.errors}) from e
     except ValueError as e:

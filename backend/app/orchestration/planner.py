@@ -25,6 +25,7 @@ MODES = {
     "hybrid": "Full Hybrid X",
     "benchmark": "Comparative Benchmark",
     "matrix": "All Combinations Matrix",
+    "swarm": "Swarm Intelligence",
 }
 
 # What each mode runs — shown to administrators and users.
@@ -55,6 +56,10 @@ MODE_INFO = {
     "hybrid": {"engines": ["quantum", "classical", "intellect", "ai"], "needs": ["solver|ai"],
                "description": "Everything that applies: quantum if suitable, classical, then Intellect review of "
                               "the computed evidence."},
+    "swarm": {"engines": ["intellect", "ai"], "needs": ["ai"],
+              "description": "Swarm Intelligence only: knowledge graph, agent personas, a dual-platform social "
+                             "simulation (Feed + Forum), a ReportAgent prediction and chat with any agent. Uses the "
+                             "swarm configuration from Admin → Swarm Intelligence."},
     "matrix": {"engines": ["ai", "intellect", "classical", "quantum"], "needs": ["solver|ai"],
                "description": "Every valid engine combination (11) on the same problem: AI Only, AI + Intellect, "
                               "AI + Quantum, AI + Intellect + Quantum, Classical vs Quantum and the rest. Each AI "
@@ -173,6 +178,11 @@ def plan(db: Session, *, mode: str, problem: dict, allow_hardware: bool = False,
         steps.append(classical_step())
         steps.append(intellect_step("Intellect review of the computed evidence" if computable else
                                     "Intellect framework (13 stages)"))
+    elif mode == "swarm":
+        swarm_reason = (OFF_REASON["swarm"] if not sw["swarm"] else OFF_REASON["intellect"] if not sw["intellect"]
+                        else no_ai if not ai_ok else "")
+        steps.append(_step("swarm", "intellect", "Swarm Intelligence: graph → personas → simulation → report",
+                           "skipped" if swarm_reason else "planned", swarm_reason))
     elif mode == "matrix":
         steps += quantum_steps(force_study=True)
         steps.append(classical_step())

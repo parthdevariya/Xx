@@ -151,6 +151,7 @@ export const MODE_LABELS: Record<string, string> = {
   hybrid: "Full Hybrid X",
   benchmark: "Comparative Benchmark",
   matrix: "All Combinations Matrix",
+  swarm: "Swarm Intelligence",
 };
 
 export type MatrixRow = {

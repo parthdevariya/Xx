@@ -52,7 +52,8 @@ class ExecutionCancelled(Exception):
 def create_execution(db: Session, *, user_id: str, text: str, inputs: dict | None, scenario: Scenario | None,
                      mode: str, attachments: list[dict] | None = None, attachments_text: str = "",
                      allow_hardware: bool = False, max_cost_usd: float | None = None,
-                     layer_switches: dict | None = None, is_demo: bool = False) -> Execution:
+                     layer_switches: dict | None = None, is_demo: bool = False,
+                     swarm_variable: str = "") -> Execution:
     settings = get_settings()
     if scenario is not None:
         pol = db.scalar(select(ScenarioExecutionPolicy).where(ScenarioExecutionPolicy.scenario_id == scenario.id))
@@ -72,7 +73,8 @@ def create_execution(db: Session, *, user_id: str, text: str, inputs: dict | Non
                           status="planned", is_demo=is_demo,
                           resource_usage={"options": {"allow_hardware": allow_hardware,
                                                       "max_cost_usd": max_cost_usd,
-                                                      "layer_switches": layer_switches or {}}})
+                                                      "layer_switches": layer_switches or {},
+                                                      "swarm_variable": swarm_variable}})
     db.add(execution)
     db.flush()
     emit(db, execution, "system", "problem.received",
@@ -347,6 +349,7 @@ def _ensure_swarm(db, execution, structured, state) -> str:
     if not (sw["swarm"] and sw["intellect"] and sw["ai"]):
         return ""
     cfg = sw["swarm_config"]
+    variable = (execution.resource_usage.get("options") or {}).get("swarm_variable") or ""
     computed = {k: state[k].to_dict() for k in ("classical", "quantum") if k in state}
     ev = chr(10).join(f"{k}: objective {o['objective_value']}, answer {json.dumps(o['answer'])[:800]}" for k, o in computed.items())
     emit(db, execution, "intellect", "swarm.started", f"Swarm Intelligence activated: {cfg['agents']} agents, "
@@ -356,7 +359,7 @@ def _ensure_swarm(db, execution, structured, state) -> str:
                                        "Swarm Intelligence", snap)
     result = Swarm(db, problem=structured.get("problem_text", ""), evidence=ev, agents=cfg["agents"],
                    rounds=cfg["rounds"], execution_id=execution.id, user_id=execution.user_id,
-                   emit=emitter(db, execution, "intellect"), save=save).run()
+                   emit=emitter(db, execution, "intellect"), save=save, config=cfg, variable=variable).run()
     state["swarm"] = result
     state["test_provider"] |= bool(result.get("test_provider"))
     return evidence_from(result)
@@ -534,7 +537,14 @@ def _run_combinations(db, execution, structured, template, data, opts, state):
             "All engine combinations", result)
 
 
+def _run_swarm(db, execution, structured, template, data, opts, state):
+    _ensure_swarm(db, execution, structured, state)
+    if "swarm" not in state:
+        emit(db, execution, "intellect", "step.skipped", "Swarm Intelligence did not run (switched off or AI unavailable)", {})
+
+
 STEP_RUNNERS = {
+    "swarm": _run_swarm,
     "combinations": _run_combinations,
     "proof": _run_proof,
     "classical": _run_classical,
@@ -578,7 +588,16 @@ def _synthesize(db: Session, execution: Execution, structured: dict, state: dict
     pr = state.get("proof")
     if pr:
         out["intellect_proof"] = _section(pr, gen)
-    if mx and execution.mode == "matrix":
+    sm = state.get("swarm")
+    if sm and sm.get("report"):
+        out["swarm_prediction"] = _section({"report": sm["report"], "metrics": sm.get("metrics"),
+                                            "question": (sm.get("graph") or {}).get("prediction_question"),
+                                            "stopped_early": sm.get("stopped_early")}, gen)
+    if sm and execution.mode == "swarm":
+        r = sm.get("report") or {}
+        summary = _section((r.get("headline", "") + chr(10) * 2 + r.get("prediction", "")).strip()
+                           or ("Swarm did not complete: " + str(sm.get("error", ""))), gen)
+    elif mx and execution.mode == "matrix":
         summary = _section(chr(10).join(mx["insights"]) or "Combination matrix complete.", gen)
     elif pr and execution.mode == "intellect_vs_ai":
         behind = pr["rules_behind_wins"]

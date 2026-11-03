@@ -27,6 +27,7 @@ const NAV: { group: string; items: { href: string; label: string; perm: string }
       { href: "/admin/intellect", label: "Framework Library", perm: "intellect.read" },
       { href: "/admin/intellect/rules", label: "Layers & Rules", perm: "intellect.read" },
       { href: "/admin/intellect/pipeline", label: "Execution Pipeline", perm: "intellect.read" },
+      { href: "/admin/intellect/swarm", label: "Swarm Intelligence", perm: "dashboard.read" },
       { href: "/admin/intellect/guardrails", label: "Guardrails", perm: "intellect.read" },
       { href: "/admin/intellect/conflicts", label: "Conflict Resolution", perm: "intellect.read" },
       { href: "/admin/intellect/lab", label: "Testing Laboratory", perm: "intellect.test" },

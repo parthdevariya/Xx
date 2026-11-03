@@ -20,8 +20,59 @@ DEFAULTS = {
     "swarm": False,
     "guardrail_audit": True,
     "layers": {},  # {"FD": false} — layer code → enabled
-    "swarm_config": {"agents": 14, "rounds": 4},
+    "swarm_config": {
+        "agents": 14, "rounds": 4,
+        "platforms": {"feed": True, "forum": True},
+        "allowed_actions": ["CREATE_POST", "QUOTE_POST", "CREATE_COMMENT", "LIKE_POST", "DISLIKE_POST", "REPOST",
+                            "FOLLOW", "MUTE", "DO_NOTHING"],
+        "memory_window": 6, "visible_posts": 16, "max_entities": 16,
+        "stage_models": {"graph": None, "setup": None, "round": None, "report": None, "chat": None},
+        "stage_effort": {"graph": "low", "setup": "low", "round": "low", "report": "medium", "chat": "low"},
+        "max_cost_usd": 2.0,
+        "default_variable": "",
+        "persona_guidance": "",
+        "memory_backend": "internal",  # internal | zep
+    },
 }
+
+ACTIONS = ["CREATE_POST", "QUOTE_POST", "CREATE_COMMENT", "LIKE_POST", "DISLIKE_POST", "REPOST", "FOLLOW", "MUTE",
+           "DO_NOTHING"]
+STAGES = ("graph", "setup", "round", "report", "chat")
+EFFORTS = ("low", "medium", "high")
+
+
+def _validate_swarm(cfg: dict) -> dict:
+    out = copy.deepcopy(DEFAULTS["swarm_config"])
+    for k, v in cfg.items():
+        if k not in out:
+            raise ValueError(f"unknown swarm setting {k!r}")
+        if isinstance(out[k], dict) and isinstance(v, dict):
+            out[k] = {**out[k], **v}
+        else:
+            out[k] = v
+    out["agents"] = max(4, min(int(out["agents"]), 40))
+    out["rounds"] = max(1, min(int(out["rounds"]), 10))
+    out["memory_window"] = max(1, min(int(out["memory_window"]), 20))
+    out["visible_posts"] = max(4, min(int(out["visible_posts"]), 40))
+    out["max_entities"] = max(4, min(int(out["max_entities"]), 30))
+    out["max_cost_usd"] = max(0.0, float(out["max_cost_usd"]))
+    out["platforms"] = {"feed": bool(out["platforms"].get("feed", True)), "forum": bool(out["platforms"].get("forum", True))}
+    if not any(out["platforms"].values()):
+        raise ValueError("enable at least one platform")
+    acts = [a for a in out["allowed_actions"] if a in ACTIONS]
+    if not acts or not any(a in acts for a in ("CREATE_POST", "QUOTE_POST", "CREATE_COMMENT")):
+        raise ValueError("allowed actions must include at least one writing action (post, quote or comment)")
+    if "DO_NOTHING" not in acts:
+        acts.append("DO_NOTHING")
+    out["allowed_actions"] = acts
+    out["stage_models"] = {s: (out["stage_models"].get(s) or None) for s in STAGES}
+    out["stage_effort"] = {s: (out["stage_effort"].get(s) if out["stage_effort"].get(s) in EFFORTS else "low")
+                           for s in STAGES}
+    if out["memory_backend"] not in ("internal", "zep"):
+        raise ValueError("memory_backend must be internal or zep")
+    out["default_variable"] = str(out["default_variable"])[:2000]
+    out["persona_guidance"] = str(out["persona_guidance"])[:2000]
+    return out
 
 
 def get_switches(db: Session) -> dict:
@@ -29,7 +80,12 @@ def get_switches(db: Session) -> dict:
     out = copy.deepcopy(DEFAULTS)
     if row and row.value:
         for k, v in row.value.items():
-            if k in ("layers", "swarm_config") and isinstance(v, dict):
+            if k == "swarm_config" and isinstance(v, dict):
+                try:
+                    out[k] = _validate_swarm(v)
+                except (ValueError, TypeError):
+                    out[k] = {**out[k], **v}
+            elif k == "layers" and isinstance(v, dict):
                 out[k] = {**out[k], **v}
             elif k in out:
                 out[k] = v
@@ -41,15 +97,16 @@ def set_switches(db: Session, changes: dict, user_id: str | None) -> dict:
     for k, v in changes.items():
         if k not in DEFAULTS:
             raise ValueError(f"unknown switch {k!r}")
-        if k in ("layers", "swarm_config"):
+        if k == "swarm_config":
             if not isinstance(v, dict):
-                raise ValueError(f"{k} must be an object")
+                raise ValueError("swarm_config must be an object")
+            current[k] = _validate_swarm({**current[k], **v})
+        elif k == "layers":
+            if not isinstance(v, dict):
+                raise ValueError("layers must be an object")
             current[k] = {**current[k], **v}
         else:
             current[k] = bool(v)
-    cfg = current["swarm_config"]
-    cfg["agents"] = max(4, min(int(cfg.get("agents", 14)), 40))
-    cfg["rounds"] = max(1, min(int(cfg.get("rounds", 4)), 10))
     row = db.get(SystemSetting, KEY)
     if row is None:
         row = SystemSetting(key=KEY, value={}, description="Master Control engine switchboard")
