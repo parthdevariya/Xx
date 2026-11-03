@@ -10,7 +10,7 @@ import type { SystemStatus } from "@/lib/types";
 
 type Line = { label: string; state: "pending" | "ok" | "warn" | "off"; detail: string };
 
-/** Initialisation sequence driven by the real /api/system/status. Never blocks entry; Skip is always available. */
+/** Initialisation sequence driven by the real /api/system/status. Never blocks entry: it completes on its own in a few seconds. */
 export function InitSequence({ onDone, reducedMotion }: { onDone: (s: SystemStatus | null) => void; reducedMotion: boolean }) {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -97,11 +97,8 @@ export function InitSequence({ onDone, reducedMotion }: { onDone: (s: SystemStat
               </motion.li>
             )}
           </ol>
-          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
+          <div className="mt-8 text-xs text-muted">
             <span className="font-mono text-[10.5px]">● ready ○ not configured ▲ attention ◌ checking</span>
-            <button onClick={() => onDone(status)} className="rounded-[3px] border border-green/30 px-2.5 py-1 font-mono text-[11px] tracking-[0.14em] text-green/80 hover:border-green hover:text-green">
-              SKIP INTRO
-            </button>
           </div>
         </div>
       </motion.div>
