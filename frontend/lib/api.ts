@@ -57,6 +57,13 @@ async function request<T>(method: string, path: string, body?: unknown, isForm =
     }
   }
   if (!res.ok) {
+    // Gateway pages (Render/proxy HTML for 502/503/504) are never shown raw.
+    const isHtml = typeof data === "string" && /^\s*</.test(data);
+    if (isHtml || [502, 503, 504].includes(res.status)) {
+      throw new ApiError(res.status, res.status === 404 && isHtml
+        ? "The X API endpoint was not found."
+        : `The X API service is unavailable (${res.status}). It may be starting up or failing to start — try again in a minute, or check the API service logs.`);
+    }
     const detail = (data as { detail?: unknown })?.detail ?? data;
     throw new ApiError(res.status, messageFrom(detail, `Request failed (${res.status})`), detail);
   }
