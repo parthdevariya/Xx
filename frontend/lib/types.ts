@@ -135,6 +135,7 @@ export type SystemStatus = {
   intellect: { framework: string | null; version: string | null; layers: number; rules: number; protected: number; status: string };
   scenarios: { published: number };
   worker: { recently_active_jobs: number };
+  switches?: { ai: boolean; intellect: boolean; quantum: boolean; swarm: boolean; guardrail_audit: boolean };
 };
 
 export const MODE_LABELS: Record<string, string> = {

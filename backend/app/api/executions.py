@@ -251,6 +251,34 @@ def execution_trace(eid: str, db: Session = Depends(get_db), user: User = Depend
     }
 
 
+class SwarmChatIn(BaseModel):
+    target: str = Field(max_length=40)  # agent id or "report"
+    message: str = Field(min_length=1, max_length=4000)
+    history: list[dict] = []
+
+
+@router.post("/executions/{eid}/swarm/chat")
+def swarm_chat(eid: str, body: SwarmChatIn, request: Request, db: Session = Depends(get_db),
+               user: User = Depends(require("executions.run"))):
+    from ..ai.service import AIUnavailable
+    from ..intellect.swarm import chat
+    ex = _visible(db, user, eid)
+    row = db.scalar(select(ExecutionResult).where(ExecutionResult.execution_id == ex.id,
+                                                  ExecutionResult.step_key == "swarm"))
+    if row is None or not row.content.get("report"):
+        raise HTTPException(status_code=409, detail="Deep Interaction needs a completed swarm simulation.")
+    limit(request, "swarm-chat", 30)
+    try:
+        return chat(db, row.content, target=body.target, message=body.message, history=body.history,
+                    execution_id=ex.id, user_id=user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except AIUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    finally:
+        db.commit()
+
+
 @router.get("/executions/{eid}/report.{fmt}")
 def report(eid: str, fmt: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
     ex = _visible(db, user, eid)

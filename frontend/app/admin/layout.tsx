@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RequireAuth } from "@/components/RequireAuth";
 import { cx } from "@/components/ui";
 import { GlitchText } from "@/components/fx/GlitchText";
 import { MatrixRain } from "@/components/fx/MatrixRain";
+import { Switchboard } from "@/components/admin/Switchboard";
 import { Clock, TelemetryStrip } from "@/components/fx/Telemetry";
 import { Wordmark } from "@/components/XMark";
 import { useAuth } from "@/lib/auth";
@@ -91,12 +92,23 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const hdr = useRef<HTMLElement>(null);
+  // The header grows with the switchboard; keep the sidebar offset in step with its real height.
+  useEffect(() => {
+    const el = hdr.current;
+    if (!el) return;
+    const set = () => document.documentElement.style.setProperty("--x-hdr", `${el.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
   return (
     <RequireAuth permission="dashboard.read">
       <div className="x-grid x-vignette min-h-dvh">
         <MatrixRain opacity={0.07} density={0.6} />
         <div className="x-above-rain">
-          <header className="sticky top-0 z-30 border-b border-green/15 bg-bg/90 backdrop-blur">
+          <header ref={hdr} className="sticky top-0 z-30 border-b border-green/15 bg-bg/90 backdrop-blur">
             <div className="flex h-14 items-center justify-between gap-3 px-4">
               <div className="flex items-center gap-3">
                 <button className="rounded p-1 text-green/70 lg:hidden" onClick={() => setOpen(!open)} aria-label="Toggle navigation" aria-expanded={open}>☰</button>
@@ -115,9 +127,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
             </div>
             <TelemetryStrip />
+            <Switchboard />
           </header>
           <div className="flex">
-            <aside className={cx("fixed inset-y-[6.4rem] left-0 z-20 w-60 overflow-y-auto border-r border-green/10 bg-bg/95 p-3 transition-transform lg:sticky lg:top-[6.4rem] lg:h-[calc(100dvh-6.4rem)] lg:translate-x-0",
+            <aside className={cx("fixed top-[var(--x-hdr,6.4rem)] bottom-0 left-0 z-20 w-60 overflow-y-auto border-r border-green/10 bg-bg/95 p-3 transition-transform lg:sticky lg:top-[var(--x-hdr,6.4rem)] lg:h-[calc(100dvh-var(--x-hdr,6.4rem))] lg:translate-x-0",
               open ? "translate-x-0" : "-translate-x-full")}>
               <Nav onNavigate={() => setOpen(false)} />
               <div className="mt-6 border-t border-green/10 px-2 pt-3 font-mono text-[9.5px] leading-relaxed tracking-[0.14em] text-green/35">

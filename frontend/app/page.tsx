@@ -9,6 +9,7 @@ import { Insights, PlanView } from "@/components/command/Insights";
 import { LiveConsole } from "@/components/command/LiveConsole";
 import { ProblemConsole } from "@/components/command/ProblemConsole";
 import { Results } from "@/components/command/Results";
+import { SwarmTheatre, type SwarmState } from "@/components/command/SwarmTheatre";
 import { ScenarioLibrary } from "@/components/command/ScenarioLibrary";
 import { engineStates, useExecution } from "@/components/command/useExecution";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -26,11 +27,14 @@ import type { Execution, Scenario, SystemStatus } from "@/lib/types";
 function EnginePills({ status }: { status: SystemStatus | null }) {
   if (!status) return <span className="text-xs text-muted">checking engines…</span>;
   const q = status.quantum.providers.filter((p) => p.status === "healthy" && p.active).map((p) => p.vendor);
+  const off = status.switches ?? { ai: true, intellect: true, quantum: true, swarm: false, guardrail_audit: true };
   const pills: [string, string, string][] = [
-    ["AI", status.ai.status === "ready" ? "ready" : "unconfigured",
-      status.ai.status === "ready" ? status.ai.configured_providers.join(", ") : status.ai.test_provider_active ? "test provider only" : "not configured"],
-    ["Quantum", q.length ? "ready" : "unavailable", q.length ? q.join(", ") : "none"],
-    ["Intellect", status.intellect.status, status.intellect.version ? `${status.intellect.version} · ${status.intellect.rules} rules` : "missing"],
+    off.ai ? ["AI", status.ai.status === "ready" ? "ready" : "unconfigured",
+      status.ai.status === "ready" ? status.ai.configured_providers.join(", ") : status.ai.test_provider_active ? "test provider only" : "not configured"]
+      : ["AI", "cancelled", "OFF"],
+    off.quantum ? ["Quantum", q.length ? "ready" : "unavailable", q.length ? q.join(", ") : "none"] : ["Quantum", "cancelled", "OFF"],
+    off.intellect ? ["Intellect", status.intellect.status, (status.intellect.version ? `${status.intellect.version} · ${status.intellect.rules} rules` : "missing") + (off.swarm ? " · swarm" : "")]
+      : ["Intellect", "cancelled", "OFF"],
   ];
   return (
     <div className="hidden items-center gap-4 md:flex">
@@ -92,12 +96,14 @@ function CommandCentre() {
   }, [execution?.status, execution]);
 
   const available = useMemo(() => ({
-    ai: status?.ai.status === "ready" || !!status?.ai.test_provider_active,
-    quantum: status?.quantum.status === "ready",
-    intellect: status?.intellect.status === "ready",
+    ai: status?.switches?.ai !== false && (status?.ai.status === "ready" || !!status?.ai.test_provider_active),
+    quantum: status?.switches?.quantum !== false && status?.quantum.status === "ready",
+    intellect: status?.switches?.intellect !== false && status?.intellect.status === "ready",
   }), [status]);
   const states = engineStates(execution, cached ? [] : live.events, available);
   const running = !!execution && ["queued", "running"].includes(execution.status);
+  const swarmResult = execution?.results?.find((r) => r.step === "swarm");
+  const swarmEvents = !cached && live.events.some((e) => e.type.startsWith("swarm."));
 
   const open = useCallback((id: string) => {
     setCached(null);
@@ -221,6 +227,12 @@ function CommandCentre() {
           </div>
         </div>
 
+        {(swarmResult || swarmEvents) && execution && (
+          <Panel title="Swarm Intelligence — Intellect sub-system" className="border-[#f5c542]/30">
+            <SwarmTheatre swarm={(swarmResult?.content as SwarmState | undefined) ?? null} cls={swarmResult?.content_class}
+              events={cached ? [] : live.events} executionId={execution.id} reducedMotion={reducedMotion} canChat={can("executions.run") && !cached} />
+          </Panel>
+        )}
         <Panel title="Results workspace" className={cx(!execution && "opacity-90")}>
           <Results execution={execution} />
         </Panel>

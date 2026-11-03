@@ -44,6 +44,8 @@ def _default_for(req: CompletionRequest) -> dict | str:
         }
     if p.startswith("intellect.guardrail_audit"):
         return {"checks": [{"rule": c, "breached": False, "note": TEST_NOTE} for c in hints.get("rule_codes", [])]}
+    if p.startswith("swarm."):
+        return _swarm_default(p, hints)
     if p.startswith("intake"):
         return {"category": "general", "objectives": [], "constraints": [], "required_outputs": [],
                 "missing_information": [], "complexity": "low", "summary": TEST_NOTE,
@@ -92,3 +94,35 @@ class DeterministicTestAdapter:
         return Completion(text=text, model=req.model or "x-test-deterministic", provider_kind=self.kind,
                           input_tokens=n_in, output_tokens=len(text) // 4, latency_ms=0.0,
                           stop_reason="end_turn", data=data)
+
+
+def _swarm_default(p: str, hints: dict):
+    """Deterministic placeholder swarm data so the Swarm pipeline and UI can be exercised offline."""
+    import random
+    rnd = random.Random(p + str(len(hints.get("posts", []))))
+    if p == "swarm.graph":
+        ents = [{"id": f"e{i}", "name": f"{TEST_NOTE[:13]} entity {i}", "summary": "placeholder",
+                 "type": ["person", "group", "organisation", "concept", "event"][i % 5]} for i in range(1, 9)]
+        rels = [{"source": f"e{i}", "target": f"e{(i % 8) + 1}", "type": "relates_to", "summary": ""} for i in range(1, 9)]
+        return {"prediction_question": f"{TEST_NOTE} question", "entities": ents, "relations": rels, "key_variables": []}
+    if p == "swarm.setup":
+        n = int(hints.get("n_agents", 8))
+        return {"stance_axis": "against ↔ for (test)", "agents": [
+            {"id": f"a{i}", "name": f"Agent {i}", "entity_id": f"e{(i % 8) + 1}", "role": "test persona",
+             "persona": TEST_NOTE, "stance": round(rnd.uniform(-1, 1), 2), "influence": round(rnd.random(), 2),
+             "platform": ["feed", "forum", "both"][i % 3], "interests": ["test"]} for i in range(1, n + 1)]}
+    if p.startswith("swarm.round"):
+        posts = hints.get("posts", [])
+        acts = []
+        for aid in hints.get("agents", []):
+            kind = rnd.choice(["CREATE_POST", "LIKE_POST", "REPOST", "CREATE_COMMENT", "QUOTE_POST", "FOLLOW",
+                               "DO_NOTHING"] if posts else ["CREATE_POST", "DO_NOTHING"])
+            target = rnd.choice(posts) if posts and kind in ("LIKE_POST", "REPOST", "CREATE_COMMENT", "QUOTE_POST")                 else (rnd.choice(hints["agents"]) if kind == "FOLLOW" else "")
+            acts.append({"agent_id": aid, "action": kind, "content": f"{TEST_NOTE} post" if kind in
+                         ("CREATE_POST", "QUOTE_POST", "CREATE_COMMENT") else "", "target": target,
+                         "stance_after": round(rnd.uniform(-1, 1), 2), "memory_note": "test"})
+        return {"actions": acts}
+    if p == "swarm.report":
+        return {"headline": f"{TEST_NOTE} headline", "prediction": TEST_NOTE, "confidence": "low",
+                "drivers": [], "turning_points": [], "minority_views": [], "risks": [], "recommendation": TEST_NOTE}
+    return f"{TEST_NOTE} swarm reply"

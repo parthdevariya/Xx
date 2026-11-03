@@ -7,7 +7,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import require
+from ..engine_switches import get_switches
+from ..deps import current_user, require
 from ..models import (AIExecutionLog, AIProvider, AuditLog, BackgroundJob, CostRecord, Execution,
                       IntellectFramework, IntellectRule, IntellectVersion, QuantumJob, QuantumProvider, Scenario,
                       SystemSetting, User, utcnow)
@@ -44,6 +45,8 @@ def system_status(db: Session = Depends(get_db)):
                       "protected": sum(1 for r in v.rules if r.is_protected) if v else 0,
                       "status": "ready" if v else "missing"},
         "scenarios": {"published": _count(db, Scenario, Scenario.status == "published")},
+        "switches": {k: v for k, v in get_switches(db).items()
+                     if k in ("ai", "intellect", "quantum", "swarm", "guardrail_audit")},
         "worker": {"recently_active_jobs": workers_recent},
     }
 
@@ -100,6 +103,31 @@ def audit_logs(category: str | None = None, outcome: str | None = None, q: str |
     return [{"id": a.id, "at": a.at, "actor": a.actor_email, "category": a.category, "action": a.action,
              "target_type": a.target_type, "target_id": a.target_id, "outcome": a.outcome, "detail": a.detail,
              "ip": a.ip} for a in db.scalars(stmt)]
+
+
+@router.get("/engine-switches")
+def engine_switches(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    from ..orchestration.planner import active_framework_version
+    v = active_framework_version(db)
+    return {"switches": get_switches(db), "can_edit": "policies.write" in user.permission_codes,
+            "layers": [{"code": l.code, "name": l.name, "question": l.question,
+                        "protected_rules": sorted(r.rule_code for r in v.rules if r.is_protected and r.layer_id == l.id)}
+                       for l in v.layers] if v else []}
+
+
+@router.put("/admin/engine-switches")
+def put_engine_switches(body: dict, request: Request, db: Session = Depends(get_db),
+                        user: User = Depends(require("policies.write"))):
+    from ..engine_switches import set_switches
+    before = get_switches(db)
+    try:
+        after = set_switches(db, body, user.id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    changed = {k: {"from": before[k], "to": after[k]} for k in after if before.get(k) != after[k]}
+    audit(db, actor=user, category="config", action="engine_switches_changed", detail=changed, request=request)
+    db.commit()
+    return after
 
 
 @router.get("/modes")

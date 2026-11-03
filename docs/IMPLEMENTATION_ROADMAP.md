@@ -75,3 +75,8 @@ Status as of 3 November 2026. "Verified" means covered by automated tests or exe
 2. Add an Anthropic (or other) key and run the Intellect regression suite in the Testing Laboratory with real test cases written by the framework owner.
 3. Connect one hardware provider (IBM Quantum or D-Wave Leap free tiers) and run a hardware-labelled benchmark.
 4. Add VQE/ground-state and Grover scenarios, and CUDA-Q/PennyLane adapters.
+
+## Swarm Intelligence and the Master Control switchboard (added 3 November 2026)
+
+- **Swarm Intelligence** (Intellect sub-system, `backend/app/intellect/swarm.py`) is an independent implementation of the five-stage swarm-prediction workflow popularised by MiroFish (github.com/666ghj/MiroFish): Graph Building → Environment Setup → dual-platform Simulation (Feed + Forum, agent actions with memory) → Report Generation (ReportAgent) → Deep Interaction (chat with any agent or the ReportAgent). No MiroFish code is used; MiroFish is AGPL-3.0, and X does not include, link or modify it. Engagement, stance trajectories, polarisation and influence edges are computed from the recorded action log; agent posts and the report are model-generated and labelled. When switched on, the swarm runs once per execution, before the Intellect pipeline, and its prediction is passed to the 13 stages as evidence. Cost ≈ 4 + 2 × rounds model calls.
+- **Engine switchboard** (`backend/app/engine_switches.py`, shown at the top of every admin page) switches AI, Intellect (with each of the 10 layers, Swarm Intelligence and the guardrail audit) and Quantum on or off. Enforced in the AI service, the planner and the Intellect pipeline. Switching a layer off never disables its protected guardrails. Changes require `policies.write` and are audited.

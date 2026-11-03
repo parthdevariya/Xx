@@ -148,6 +148,8 @@ def run_matrix(db: Session, *, execution, structured: dict, template: str | None
                                       "wall_time_s": o["wall_time_s"], "qubits": o.get("qubits", 0)}
         if row["applicable"] and "ai" in combo:
             ev = _evidence({e: outcomes[e] for e in comp_engines})
+            if "intellect" in combo and state.get("swarm_evidence"):
+                ev = (ev + chr(10) * 2 + state["swarm_evidence"]).strip()
             emit("matrix.combo_started", f"Combination {label}: generating answer", {"combo": key})
             t0 = time.perf_counter()
             if "intellect" in combo:

@@ -85,16 +85,19 @@ def plan(db: Session, *, mode: str, problem: dict, allow_hardware: bool = False,
     template = problem.get("solver_template")
     data = problem.get("template_data") or {}
     missing = problem.get("missing_information") or []
+    from ..engine_switches import OFF_REASON, get_switches
+    sw = get_switches(db)
     ai_ok = ai.any_model_available(db, allow_test=ai.test_provider_allowed(db))
     version = active_framework_version(db, framework_slug)
-    no_ai = "no AI provider is configured and available (Admin → AI Management)"
+    no_ai = (OFF_REASON["ai"] if not sw["ai"] else
+             "no AI provider is configured and available (Admin → AI Management)")
     no_solver = ("the problem has no solver formulation" if not template else
                  f"required data is missing: {'; '.join(missing)}" if missing else "")
 
     decision = selection.evaluate(db, template=template, data=data, missing=missing if template else None,
                                   mode=mode, allow_hardware=allow_hardware, max_cost_usd=max_cost_usd,
                                   eligibility=problem.get("quantum_eligibility", "evaluate"))
-    run_q = decision["run_quantum"]
+    run_q = decision["run_quantum"] and sw["quantum"]
     q_reason = decision["explanation"]
     computable = bool(template) and not missing
     steps: list[dict] = [_step("intake", "system", "Problem intake and classification", status="completed")]
@@ -103,6 +106,8 @@ def plan(db: Session, *, mode: str, problem: dict, allow_hardware: bool = False,
         return _step("ai_reason", "ai", "AI reasoning", "planned" if ai_ok else "skipped", "" if ai_ok else no_ai)
 
     def intellect_step(title="Intellect framework (13 stages)"):
+        if not sw["intellect"]:
+            return _step("intellect", "intellect", title, "skipped", OFF_REASON["intellect"])
         if version is None:
             return _step("intellect", "intellect", title, "skipped", "no published framework version")
         return _step("intellect", "intellect", f"{title} — {version.label}", "planned" if ai_ok else "skipped",
@@ -113,6 +118,10 @@ def plan(db: Session, *, mode: str, problem: dict, allow_hardware: bool = False,
                      "planned" if computable else "skipped", no_solver)
 
     def quantum_steps(force_study: bool):
+        if not sw["quantum"]:
+            return [_step("quantum_select", "quantum", "Quantum suitability evaluation", "completed",
+                          decision=decision["decision"]),
+                    _step("quantum", "quantum", "Quantum execution", "skipped", OFF_REASON["quantum"])]
         s = [_step("quantum_select", "quantum", "Quantum suitability evaluation", "completed",
                    decision=decision["decision"])]
         if run_q:

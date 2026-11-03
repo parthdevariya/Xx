@@ -48,7 +48,14 @@ def default_policy(db: Session) -> AIRoutingPolicy | None:
     return db.scalar(select(AIRoutingPolicy).where(AIRoutingPolicy.is_default.is_(True)))
 
 
+def ai_switched_on(db: Session) -> bool:
+    from ..engine_switches import get_switches
+    return bool(get_switches(db)["ai"])
+
+
 def any_model_available(db: Session, allow_test: bool = False) -> bool:
+    if not ai_switched_on(db):
+        return False
     models = list(db.scalars(select(AIModel)))
     return bool(rank(models, RouteRequest(capability="", allow_test_provider=allow_test), None).candidates)
 
@@ -63,6 +70,9 @@ def complete(db: Session, *, messages: list[ChatMessage], system: str = "", rout
              json_schema: dict | None = None, max_tokens: int = 4096, effort: str | None = "medium",
              purpose: str = "", execution_id: str | None = None, user_id: str | None = None,
              hints: dict | None = None, timeout_s: float = 180.0) -> AIResult:
+    if not ai_switched_on(db):
+        from ..engine_switches import OFF_REASON
+        raise AIUnavailable(OFF_REASON["ai"].capitalize() + ".")
     route = route or RouteRequest()
     if not route.allow_test_provider:
         route.allow_test_provider = test_provider_allowed(db)

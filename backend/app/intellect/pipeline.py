@@ -151,6 +151,11 @@ def run_framework(db: Session, version: IntellectVersion, problem: str, *, evide
     if missing:
         raise IntellectUnavailable(f"framework version {version.label} is missing protected guardrails {missing}; "
                                    "it cannot run")
+    from ..engine_switches import get_switches, layers_off
+    master = get_switches(db)
+    if not master["intellect"]:
+        raise IntellectUnavailable("the Intellect engine is switched OFF in Master Control")
+    layer_switches = {**(layer_switches or {}), **layers_off(db)}
     sw = resolve_switches(version, layer_switches, rule_switches)
     run = IntellectRun(version_id=version.id, execution_id=execution_id, test_case_id=test_case_id, origin=origin,
                        user_id=user_id, prompt=problem,
@@ -284,7 +289,7 @@ def run_framework(db: Session, version: IntellectVersion, problem: str, *, evide
 
     _static_conflicts(db, run, version, applied, by_code, hard)
     audit = _guardrail_audit(db, version, run, problem, final, execution_id, user_id, allow_test_provider) \
-        if ai_ok and final else {"performed": False}
+        if ai_ok and final and master["guardrail_audit"] else         {"performed": False, "reason": "switched off in Master Control" if not master["guardrail_audit"] else ""}
     counts: dict[str, int] = {}
     for rec in stage_records:
         for s in rec["rule_states"]:
