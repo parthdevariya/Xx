@@ -50,7 +50,7 @@ def test_library_v2_retires_original_scenarios_once(db):
 def test_mode_catalogue_complete(api):
     api.login("user@example.com")
     cat = api.get("/api/modes").json()
-    assert [m["key"] for m in cat] == list(MODES) and len(cat) == 11
+    assert [m["key"] for m in cat] == list(MODES) and len(cat) == 12
     assert set(MODE_INFO) == set(MODES)
 
 
@@ -147,3 +147,51 @@ def test_generator_validates_rules_and_needs_ai(api, seeded):
     payload = {k: v for k, v in d.items() if not k.startswith("_") and k != "suggested_policy"}
     saved = api.post("/api/scenarios", json=payload)
     assert saved.status_code == 200, saved.text
+
+
+def test_combination_matrix_end_to_end(api, seeded):
+    enable_test_provider(seeded)
+    register_responder("matrix.answer", lambda req: "Plain answer. Does that help? Anything else?")
+    register_responder("intellect.stage", lambda req: {
+        "rule_assessments": [{"rule": c, "applies": c == "MC-03", "reason": "s"} for c in req.hints["rule_codes"]],
+        "output": "INTELLECT: keep the promise to Meera; alternative roster costs more.", "conflicts": [],
+        "preset": {"register": "", "pace": "", "intensity": "", "rule_ids": []}})
+
+    def judge(req):
+        text = req.messages[0].content
+        crit = [l[3:l.index("]")] for l in text.split("Criteria:")[1].splitlines() if l.startswith("- [")]
+        n = text.count("</response_")
+        out = []
+        for i in range(1, n + 1):
+            body = text.split(f"<response_{i}>")[1].split(f"</response_{i}>")[0]
+            for c in crit:
+                out.append({"criterion_id": c, "response": i, "pass": "INTELLECT" in body, "evidence": "q", "reason": "r"})
+        return {"verdicts": out}
+    register_responder("matrix.judge", judge)
+    api.login("user@example.com")
+    ex = api.post("/api/executions", json={"scenario_slug": "optimal-roster-broken-promise", "mode": "matrix"}).json()
+    drain_jobs()
+    done = api.get(f"/api/executions/{ex['id']}").json()
+    assert done["status"] == "completed", done["error"]
+    mx = next(r for r in done["results"] if r["step"] == "combinations")["content"]
+    rows = {r["key"]: r for r in mx["combinations"]}
+    assert len(rows) == 11 and all(r["applicable"] for r in rows.values())
+    assert rows["classical"]["computed"]["classical"]["objective_value"] == 13
+    assert rows["quantum"]["computed"]["quantum"]["execution_class"] == "local_simulator"
+    assert rows["ai+intellect+quantum"]["rubric"]["score"] > rows["ai+quantum"]["rubric"]["score"]
+    assert any(i.startswith("Adding Intellect to AI Only") for i in mx["insights"])
+    assert mx["judge"]["blind"] and len(mx["judge"]["slots"]) == 8
+    trace = api.get(f"/api/executions/{ex['id']}/trace").json()
+    assert len(trace["intellect_runs"]) == 4 and trace["quantum_jobs"] and trace["ai_calls"]
+
+
+def test_matrix_on_reasoning_scenario_marks_computation_not_applicable(api, seeded):
+    enable_test_provider(seeded)
+    api.login("user@example.com")
+    ex = api.post("/api/executions", json={"scenario_slug": "confident-fabrication", "mode": "matrix"}).json()
+    drain_jobs()
+    done = api.get(f"/api/executions/{ex['id']}").json()
+    mx = next(r for r in done["results"] if r["step"] == "combinations")["content"]
+    applicable = [r["key"] for r in mx["combinations"] if r["applicable"]]
+    assert applicable == ["ai", "ai+intellect"]
+    assert all("no solver formulation" in r["reason"] for r in mx["combinations"] if not r["applicable"])

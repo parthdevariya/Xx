@@ -24,6 +24,7 @@ MODES = {
     "ai_quantum": "AI + Quantum",
     "hybrid": "Full Hybrid X",
     "benchmark": "Comparative Benchmark",
+    "matrix": "All Combinations Matrix",
 }
 
 # What each mode runs — shown to administrators and users.
@@ -54,6 +55,11 @@ MODE_INFO = {
     "hybrid": {"engines": ["quantum", "classical", "intellect", "ai"], "needs": ["solver|ai"],
                "description": "Everything that applies: quantum if suitable, classical, then Intellect review of "
                               "the computed evidence."},
+    "matrix": {"engines": ["ai", "intellect", "classical", "quantum"], "needs": ["solver|ai"],
+               "description": "Every valid engine combination (11) on the same problem: AI Only, AI + Intellect, "
+                              "AI + Quantum, AI + Intellect + Quantum, Classical vs Quantum and the rest. Each AI "
+                              "answer is scored by one blind judge on the same rubric; computation by the true "
+                              "objective. Combinations that cannot contribute are marked not applicable."},
     "benchmark": {"engines": ["quantum", "classical", "ai", "intellect"], "needs": ["solver|ai"],
                   "description": "Every eligible approach runs independently on the same input and is compared; "
                                  "includes the judged Intellect-vs-AI proof when a rubric exists."},
@@ -158,6 +164,12 @@ def plan(db: Session, *, mode: str, problem: dict, allow_hardware: bool = False,
         steps.append(classical_step())
         steps.append(intellect_step("Intellect review of the computed evidence" if computable else
                                     "Intellect framework (13 stages)"))
+    elif mode == "matrix":
+        steps += quantum_steps(force_study=True)
+        steps.append(classical_step())
+        combos_n = 11 if computable else 2
+        steps.append(_step("combinations", "system", f"All engine combinations ({combos_n} applicable) + blind judge",
+                           "planned" if (ai_ok or computable) else "skipped", "" if (ai_ok or computable) else no_ai))
     elif mode == "benchmark":
         steps += quantum_steps(force_study=True)
         steps.append(classical_step())
@@ -169,7 +181,8 @@ def plan(db: Session, *, mode: str, problem: dict, allow_hardware: bool = False,
     steps.append(_step("synthesize", "system", "Final result and report"))
 
     planned = [s for s in steps if s["status"] == "planned"]
-    ai_calls = sum(1 for s in planned if s["engine"] == "ai") + (
+    ai_calls = (4 * (len(version.pipeline) + 1) + 5 if computable else 2 * (len(version.pipeline) + 1) + 2)         if version and mode == "matrix" and ai_ok else 0
+    ai_calls += sum(1 for s in planned if s["engine"] == "ai") + (
         (len(version.pipeline) + 1) if version and any(s["key"] == "intellect" for s in planned) else 0)
     q = next((s for s in planned if s["key"] == "quantum"), None)
     return {

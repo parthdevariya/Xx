@@ -144,7 +144,7 @@ def create_scenario(body: ScenarioIn, request: Request, db: Session = Depends(ge
     db.flush()
     _new_version(db, s, body)
     modes = list(EXECUTION_MODES) if body.solver_template else ["ai_only", "ai_intellect", "intellect_vs_ai",
-                                                                  "benchmark"]
+                                                                  "benchmark", "matrix"]
     db.add(ScenarioExecutionPolicy(scenario_id=s.id, allowed_modes=modes, default_mode=modes[-1]
                                    if "hybrid" not in modes else "hybrid"))
     audit(db, actor=user, category="scenario", action="scenario_created", target_type="scenario", target_id=s.id,

@@ -149,6 +149,36 @@ export const MODE_LABELS: Record<string, string> = {
   ai_quantum: "AI + Quantum",
   hybrid: "Full Hybrid X",
   benchmark: "Comparative Benchmark",
+  matrix: "All Combinations Matrix",
+};
+
+export type MatrixRow = {
+  key: string; label: string; engines: string[]; applicable: boolean; reason: string; answer: string;
+  computed: Record<string, { objective_value: number | null; feasible: boolean; proven_optimal: boolean; execution_class: string;
+    algorithm: string; backend: string; wall_time_s: number; qubits: number }>;
+  rules_applied: string[]; intellect_run_id: string | null; latency_s: number; cost_usd: number; content_class: ContentClass;
+  rubric?: { score: number; total: number; complete: boolean; criteria: { id: string; pass: boolean | null; evidence: string; reason: string }[] };
+};
+
+export type MatrixResult = {
+  combinations: MatrixRow[]; rubric: RubricCriterion[]; insights: string[]; sense: "min" | "max" | null;
+  judge: { model: string; blind: boolean; slots: Record<string, number>; error: string; test_provider: boolean };
+  rubric_source: string; method_note: string;
+};
+
+export type ExecutionTrace = {
+  intellect_runs: {
+    id: string; status: string; assessment_mode: string; final_output: string; summary: Record<string, unknown>;
+    stages: { position: number; layer: string; mode: string; status: string; rule_states: { rule: string; state: string; reason: string }[];
+      output: string; model: string; latency_ms: number; data: Record<string, unknown> }[];
+    conflicts: { stage: number; rules: string[]; winner: string; hierarchy_step: string; decision: string; detected_by: string }[];
+  }[];
+  ai_calls: { at: string; model: string; kind: string; purpose: string; status: string; input_tokens: number; output_tokens: number;
+    cost_usd: number; latency_ms: number; error: string }[];
+  quantum_jobs: { id: string; backend_key: string; algorithm: string; execution_class: string; status: string; qubits: number;
+    circuit_depth: number; shots: number; wall_time_s: number; cost_usd: number; error: string;
+    result: { objective_value?: number; feasible?: boolean; energy?: number; top_counts?: [string, number][] };
+    logs: { at: string; level: string; message: string }[] }[];
 };
 
 export type ModeInfo = { key: string; label: string; engines: string[]; needs: string[]; description: string };

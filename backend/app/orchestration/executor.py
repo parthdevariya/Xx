@@ -482,7 +482,21 @@ def _run_proof(db, execution, structured, template, data, opts, state):
          {"score": result["score"], "total": result["total"]})
 
 
+def _run_combinations(db, execution, structured, template, data, opts, state):
+    from .combos import run_matrix
+    version = planner.active_framework_version(db)
+    emit(db, execution, "system", "matrix.started", "Combination matrix started: AI, Intellect, Classical and Quantum "
+         "in every valid combination", {})
+    result = run_matrix(db, execution=execution, structured=structured, template=template, data=data, opts=opts,
+                        state=state, version=version, emit=emitter(db, execution, "system"),
+                        intellect_emit=emitter(db, execution, "intellect"))
+    state["matrix"] = result
+    _result(db, execution, "combinations", "system", "test" if state["test_provider"] else "computed",
+            "All engine combinations", result)
+
+
 STEP_RUNNERS = {
+    "combinations": _run_combinations,
     "proof": _run_proof,
     "classical": _run_classical,
     "quantum": _run_quantum,
@@ -519,10 +533,15 @@ def _synthesize(db: Session, execution: Execution, structured: dict, state: dict
             best = (max if t.sense == "max" else min)(cands, key=lambda o: o.objective_value)
             if c and best is not c and c.feasible and abs((c.objective_value or 0) - best.objective_value) < 1e-9:
                 best = c  # on a tie, report the classical (proven) answer
+    mx = state.get("matrix")
+    if mx:
+        out["combination_matrix"] = _section({"insights": mx["insights"], "judge": mx["judge"]}, gen)
     pr = state.get("proof")
     if pr:
         out["intellect_proof"] = _section(pr, gen)
-    if pr and execution.mode == "intellect_vs_ai":
+    if mx and execution.mode == "matrix":
+        summary = _section(chr(10).join(mx["insights"]) or "Combination matrix complete.", gen)
+    elif pr and execution.mode == "intellect_vs_ai":
         behind = pr["rules_behind_wins"]
         summary = _section(pr["verdict"] + (f"\n\nRules behind the difference: {', '.join(behind)}" if behind else ""),
                            gen)

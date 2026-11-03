@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { MatrixView } from "./MatrixView";
 import { ProofView } from "./ProofView";
 import { Badge, ContentBadge, Empty, ExecBadge, JsonView, KV, Notice, Table, Tabs, Td, cx, fmtNum } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
-import type { BenchmarkMetric, Execution, ProofResult, Section } from "@/lib/types";
+import type { BenchmarkMetric, Execution, MatrixResult, ProofResult, Section } from "@/lib/types";
 
-type Tab = "proof" | "summary" | "solution" | "method" | "reasoning" | "calc" | "quantum" | "benchmark" | "raw";
+type Tab = "matrix" | "proof" | "summary" | "solution" | "method" | "reasoning" | "calc" | "quantum" | "benchmark" | "raw";
 
 function sec(ex: Execution, key: string): Section | null {
   const v = ex.final_output?.[key];
@@ -162,9 +163,12 @@ export function Results({ execution }: { execution: Execution | null }) {
   const { can } = useAuth();
   const proofResult = execution?.results?.find((r) => r.step === "proof")?.content as ProofResult | undefined;
   const hasProof = !!proofResult?.criteria;
+  const matrixResult = execution?.results?.find((r) => r.step === "combinations")?.content as MatrixResult | undefined;
+  const hasMatrix = !!matrixResult?.combinations;
   useEffect(() => {
-    if (hasProof) setTab("proof");
-  }, [hasProof, execution?.id]);
+    if (hasMatrix) setTab("matrix");
+    else if (hasProof) setTab("proof");
+  }, [hasProof, hasMatrix, execution?.id]);
   if (!execution) return <Empty>Results appear here: executive summary, solution, methodology, reasoning trace, calculations, quantum contribution, benchmark and limitations.</Empty>;
   const done = execution.status === "completed";
   const results = execution.results ?? [];
@@ -174,6 +178,7 @@ export function Results({ execution }: { execution: Execution | null }) {
   const intellect = results.find((r) => r.step === "intellect");
   const detail = sec(execution, "detailed_solution");
   const tabs: { value: Tab; label: string }[] = [
+    ...(hasMatrix ? [{ value: "matrix" as Tab, label: "All combinations" }] : []),
     ...(hasProof ? [{ value: "proof" as Tab, label: "Intellect vs AI" }] : []),
     { value: "summary", label: "Summary" }, { value: "solution", label: "Solution" }, { value: "method", label: "Methodology" },
     { value: "reasoning", label: "Reasoning" }, { value: "calc", label: "Calculations" }, { value: "quantum", label: "Quantum" },
@@ -196,6 +201,7 @@ export function Results({ execution }: { execution: Execution | null }) {
       </div>
       {!done && tab !== "raw" && execution.status !== "failed" && <p className="text-sm text-muted">Execution {execution.status}. Sections fill in as steps complete.</p>}
 
+      {tab === "matrix" && matrixResult && <MatrixView m={matrixResult} />}
       {tab === "proof" && proofResult && <ProofView proof={proofResult} />}
       {tab === "summary" && (
         <div className="space-y-5">

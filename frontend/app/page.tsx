@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Core } from "@/components/command/Core";
+import { EngineInspector } from "@/components/command/EngineInspector";
 import { InitSequence } from "@/components/command/InitSequence";
 import { Insights, PlanView } from "@/components/command/Insights";
 import { LiveConsole } from "@/components/command/LiveConsole";
@@ -77,6 +78,7 @@ function CommandCentre() {
   const [error, setError] = useState<unknown>(null);
   const [historyKey, setHistoryKey] = useState(0);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [inspect, setInspect] = useState<"ai" | "quantum" | "intellect" | null>(null);
   const live = useExecution(cached ? null : execId);
   const execution = cached ?? live.execution;
 
@@ -198,7 +200,7 @@ function CommandCentre() {
           <div className="space-y-4">
             <Panel title="X computational core" actions={execution ? <Badge>{execution.mode_label}</Badge> : null}>
               <div className="grid items-center gap-4 lg:grid-cols-[minmax(0,400px)_1fr]">
-                <Core states={states} running={running} reducedMotion={reducedMotion} events={cached ? [] : live.events} />
+                <Core states={states} running={running} reducedMotion={reducedMotion} events={cached ? [] : live.events} onSelect={setInspect} />
                 <div className="min-w-0">
                   {execution?.plan ? <PlanView execution={execution} events={cached ? [] : live.events} onRun={runPlan} />
                     : <p className="text-sm text-muted">Choose a scenario or describe a problem. X classifies it, plans which engines apply — and says when quantum computation does not — then runs the plan and records every step.</p>}
@@ -223,6 +225,8 @@ function CommandCentre() {
           <Results execution={execution} />
         </Panel>
       </main>
+      <EngineInspector engine={inspect} execution={execution} events={cached ? [] : live.events} reducedMotion={reducedMotion}
+        onClose={() => setInspect(null)} onSwitch={setInspect} />
     </div>
   );
 }

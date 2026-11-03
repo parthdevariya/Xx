@@ -317,4 +317,11 @@ def seed_proof_scenarios(db: Session) -> None:
                                              "(re-publish from Admin → Scenarios if needed)."))
         else:
             flag.value = {"version": 2}
+        flag = db.get(SystemSetting, "scenario_library")
+    # Library v3: enable the All Combinations Matrix on every scenario once.
+    if (flag.value or {}).get("version", 1) < 3:
+        for pol in db.scalars(select(ScenarioExecutionPolicy)):
+            if "matrix" not in (pol.allowed_modes or []):
+                pol.allowed_modes = [*pol.allowed_modes, "matrix"]
+        flag.value = {"version": 3}
     db.flush()

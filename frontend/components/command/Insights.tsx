@@ -63,6 +63,8 @@ export const STEP_EVENTS: Record<string, { done: RegExp; active: RegExp }> = {
   ai_explain: { done: /^ai\.(completed|unavailable)$/, active: /^ai\.started$/ },
   intellect: { done: /^intellect\.(completed|failed)$/, active: /^intellect\.activated$/ },
   benchmark: { done: /^benchmark\.completed$/, active: /^benchmark\.started$/ },
+  proof: { done: /^proof\.completed$/, active: /^proof\.started$/ },
+  combinations: { done: /^matrix\.completed$/, active: /^matrix\.started$/ },
   synthesize: { done: /^execution\.completed$/, active: /^$/ },
 };
 

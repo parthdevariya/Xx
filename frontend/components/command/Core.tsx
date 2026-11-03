@@ -55,9 +55,9 @@ export function stageStates(events: ExecEvent[]): { states: StageState[]; total:
 }
 
 /** The X reactor. Every lit element maps to a real engine state or recorded pipeline event. */
-export function Core({ states, running, reducedMotion, events = [] }: {
+export function Core({ states, running, reducedMotion, events = [], onSelect }: {
   states: Record<"ai" | "quantum" | "intellect", EngineState>; running: boolean; reducedMotion: boolean;
-  events?: ExecEvent[];
+  events?: ExecEvent[]; onSelect?: (engine: "ai" | "quantum" | "intellect") => void;
 }) {
   const { states: stages, total } = stageStates(events);
   const anyStage = stages.some((s) => s !== "pending");
@@ -196,6 +196,20 @@ export function Core({ states, running, reducedMotion, events = [] }: {
             <div className="font-mono text-[10.5px] tracking-[0.24em]" style={{ color: e.color, textShadow: `0 0 8px ${e.color}88` }}>{e.label}</div>
             <div className={`font-mono text-[9.5px] tracking-[0.14em] ${st === "processing" ? "text-text" : "text-muted"}`}>{STATE_LABEL[st]}</div>
           </div>
+        );
+      })}
+      {onSelect && ENGINES.map((e) => {
+        const p = polar(NODE_R, e.angle);
+        return (
+          <button key={e.key + "btn"} type="button" onClick={() => onSelect(e.key as "ai" | "quantum" | "intellect")}
+            aria-label={`Inspect the ${e.label} engine`}
+            className="group absolute flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full outline-none"
+            style={{ left: `${(p.x / S) * 100}%`, top: `${(p.y / S) * 100}%`, width: "17%", height: "17%" }}>
+            <span className="absolute inset-0 rounded-full opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100"
+              style={{ boxShadow: `0 0 26px 4px ${e.color}66, inset 0 0 18px ${e.color}55` }} />
+            <span className="pointer-events-none absolute -bottom-1 translate-y-full whitespace-nowrap font-mono text-[9px] tracking-[0.25em] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              style={{ color: e.color }}>▸ INSPECT</span>
+          </button>
         );
       })}
       {anyStage && (

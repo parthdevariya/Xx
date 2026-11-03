@@ -84,7 +84,7 @@ export function ProblemConsole({ scenario, onClearScenario, onSubmitted, canWrit
     return { out, errors };
   }, [fields, values]);
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent, overrideMode?: string) {
     e.preventDefault();
     if (Object.keys(parsed.errors).length) {
       setError(new Error("Fix the highlighted inputs."));
@@ -93,7 +93,7 @@ export function ProblemConsole({ scenario, onClearScenario, onSubmitted, canWrit
     setBusy(true);
     setError(null);
     const payload = {
-      text, mode, inputs: scenario ? parsed.out : {}, scenario_slug: scenario?.slug ?? null,
+      text, mode: overrideMode ?? mode, inputs: scenario ? parsed.out : {}, scenario_slug: scenario?.slug ?? null,
       allow_hardware: allowHardware, max_cost_usd: Number(maxCost) || 0, auto_run: autoRun,
     };
     try {
@@ -190,6 +190,13 @@ export function ProblemConsole({ scenario, onClearScenario, onSubmitted, canWrit
       <Button type="submit" variant="primary" className="w-full" loading={busy} disabled={!canWrite}>
         {autoRun ? "Plan & run" : "Generate plan"}
       </Button>
+      {scenario && modes.includes("matrix") && (
+        <button type="button" disabled={!canWrite || busy} onClick={(e) => submit(e as unknown as React.FormEvent, "matrix")}
+          className="group relative w-full overflow-hidden rounded-[3px] border border-cyan/50 bg-cyan/[0.06] py-2.5 font-mono text-[12px] tracking-[0.2em] text-cyan transition-colors hover:bg-cyan/[0.12] disabled:opacity-40">
+          <span className="absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-cyan/20 to-transparent transition-all duration-700 group-hover:left-full" />
+          ⚡ RUN ALL 11 ENGINE COMBINATIONS
+        </button>
+      )}
       {!canWrite && <p className="text-xs text-muted">Your role can browse but not run executions.</p>}
     </form>
   );

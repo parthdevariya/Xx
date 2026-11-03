@@ -8,9 +8,9 @@ script the answer.
 
 from __future__ import annotations
 
-REASONING_MODES = ["ai_only", "ai_intellect", "intellect_vs_ai", "benchmark"]
+REASONING_MODES = ["ai_only", "ai_intellect", "intellect_vs_ai", "benchmark", "matrix"]
 ALL_MODES = ["ai_only", "ai_intellect", "intellect_vs_ai", "classical", "quantum", "classical_quantum",
-             "ai_classical", "classical_intellect", "ai_quantum", "hybrid", "benchmark"]
+             "ai_classical", "classical_intellect", "ai_quantum", "hybrid", "benchmark", "matrix"]
 
 CATEGORIES = [
     ("intellect-proof", "Intellect Proof Lab",

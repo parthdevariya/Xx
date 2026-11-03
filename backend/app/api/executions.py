@@ -230,6 +230,27 @@ def event_out(e: ExecutionEvent) -> dict:
             "message": e.message, "data": e.data}
 
 
+@router.get("/executions/{eid}/trace")
+def execution_trace(eid: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Everything each engine did in this execution, for the engine inspector. Visible to the execution owner."""
+    from ..models import AIExecutionLog, QuantumExecutionLog, QuantumJob
+    from .intellect import run_out
+    ex = _visible(db, user, eid)
+    runs = db.scalars(select(IntellectRun).where(IntellectRun.execution_id == ex.id).order_by(IntellectRun.started_at))
+    ai_logs = db.scalars(select(AIExecutionLog).where(AIExecutionLog.execution_id == ex.id).order_by(AIExecutionLog.at))
+    jobs = db.scalars(select(QuantumJob).where(QuantumJob.execution_id == ex.id).order_by(QuantumJob.submitted_at)).all()
+    return {
+        "intellect_runs": [run_out(db, r, full=True) for r in runs],
+        "ai_calls": [{"at": l.at, "model": l.model_id, "kind": l.provider_kind, "purpose": l.purpose,
+                      "status": l.status, "input_tokens": l.input_tokens, "output_tokens": l.output_tokens,
+                      "cost_usd": l.cost_usd, "latency_ms": l.latency_ms, "error": l.error} for l in ai_logs],
+        "quantum_jobs": [{**{c.name: getattr(j, c.name) for c in QuantumJob.__table__.columns},
+                          "logs": [{"at": q.at, "level": q.level, "message": q.message} for q in
+                                   db.scalars(select(QuantumExecutionLog).where(QuantumExecutionLog.job_id == j.id))]}
+                         for j in jobs],
+    }
+
+
 @router.get("/executions/{eid}/report.{fmt}")
 def report(eid: str, fmt: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
     ex = _visible(db, user, eid)
